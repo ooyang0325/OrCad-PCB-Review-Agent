@@ -22,6 +22,10 @@ dependency. Do not replace Python 2.7 or modify global Cadence settings.
   history, not manually maintained checksums or a custom versioning system.
   Retain fingerprints only where needed for board-preservation and approval
   preconditions, not as a replacement for commits.
+- Use the human user's configured Git identity as the primary author and
+  committer. Do not override it with `Copilot App`; resolve a missing identity
+  against the user's GitHub account before committing. Do not rewrite
+  published commit attribution without explicit approval.
 - Clarify requirements before making consequential technology or integration
   choices that are not specified by the task.
 - Keep credentials, local configuration, and proprietary PCB design files
