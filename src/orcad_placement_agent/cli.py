@@ -1,4 +1,4 @@
-"""Read-only discovery of the local development environment."""
+"""Read-only environment discovery and trusted probe staging."""
 
 import argparse
 import json
@@ -12,6 +12,7 @@ from .diagnostics import (
     default_runtime_directory,
     inspect_environment,
 )
+from .probe import stage_probe
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,9 +28,23 @@ def main(argv: list[str] | None = None) -> int:
     doctor.add_argument("--cadence-root", type=Path, default=DEFAULT_CADENCE_ROOT)
     doctor.add_argument("--runtime-dir", type=Path)
     doctor.add_argument("--json", action="store_true")
+    probe = commands.add_parser("stage-probe", help="Stage a trusted read-only SKILL probe.")
+    probe.add_argument("--runtime-dir", type=Path)
+    probe.add_argument("--skill-dir", type=Path, default=Path("skill"))
+    probe.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
         runtime = args.runtime_dir if args.runtime_dir is not None else default_runtime_directory()
+        if args.command == "stage-probe":
+            staged = stage_probe(runtime, args.skill_dir)
+            if args.json:
+                print(json.dumps(staged.to_dict(), indent=2))
+            else:
+                print("Probe staged; no editor connection has been established.")
+                print(f"In the dedicated PCB Editor: {staged.load_command}")
+                print("Then run: opa_probe")
+                print(f"Report: {staged.report_file}")
+            return 0
         report = inspect_environment(args.cadence_root, runtime)
     except (ConfigurationError, OSError) as error:
         print(f"Configuration error: {error}", file=sys.stderr)
