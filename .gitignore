@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.runtime/
+*.local.json
+
+# Local reference material is not distributed with the application.
+/doc/
+/pcb_design_book/
+/design/
+
+# Native CAD outputs and working copies stay local.
+*.brd
+*.dra
+*.pad
+*.psm
+*.jrl
+*.log
