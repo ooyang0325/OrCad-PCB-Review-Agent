@@ -12,6 +12,7 @@ These are development gates, not dates or GitHub milestones.
 | M5 | Local PCB reference grounding | Local extraction/search with page citations, freshness and coverage notices | Complete |
 | M6 | Advisory expert agents | Read-only planner/reviewer profiles and bounded, citation-bearing context packets | Complete for Copilot-profile advisory workflow |
 | M7 | Visual agent execution | All profiles inspect actual Cadence PNGs; bounded tool execution obtains exact human approval and reports native/post-image outcomes | Visual/tools complete; first live move awaiting exact approval |
+| M8 | Portable client distribution | Standard MCP, packaged native assets, safe setup/config generation, and Codex/Claude/Copilot plugin-marketplace manifests | Complete packaging; client prerequisites and private-repo access required |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.
@@ -62,3 +63,11 @@ dedicated native fixture. A visually grounded R1 proposal was prepared through
 the app tool, but its exact UI confirmation was not supplied. The tool denied
 Apply and execution status reports no dispatch. No native move or implicit
 save is claimed from that run.
+
+M8 supplies a portable root manifest, a Claude-compatible adapter manifest,
+shared skills, two marketplace catalogs, and a local stdio MCP implementation.
+The Python installer does not modify client settings or execution policy.
+Portable writes are read-only by default because an MCP elicitation response
+does not establish human provenance; only an operator may opt into genuine
+interactive use without auto-answer hooks. Actual client marketplace UIs and
+native write acceptance are not implied by package/SDK conformance.

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "orcad-placement": {
+      "type": "stdio",
+      "command": "py",
+      "args": [
+        "-3",
+        "-I",
+        "-X",
+        "utf8",
+        "${PLUGIN_ROOT}\\scripts\\start_mcp.py"
+      ]
+    }
+  }
+}

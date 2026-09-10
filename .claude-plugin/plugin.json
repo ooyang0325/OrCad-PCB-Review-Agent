@@ -1,0 +1,24 @@
+{
+  "name": "orcad-placement",
+  "version": "0.2.0",
+  "description": "Local Windows Cadence PCB workflows with native images and reference grounding. Portable installs are read-only by default.",
+  "author": {
+    "name": "oo_yang",
+    "url": "https://github.com/ooyang0325"
+  },
+  "homepage": "https://github.com/ooyang0325/OrCad-PCB-Review-Agent",
+  "repository": "https://github.com/ooyang0325/OrCad-PCB-Review-Agent",
+  "mcpServers": {
+    "orcad-placement": {
+      "type": "stdio",
+      "command": "py",
+      "args": [
+        "-3",
+        "-I",
+        "-X",
+        "utf8",
+        "${CLAUDE_PLUGIN_ROOT}\\scripts\\start_mcp.py"
+      ]
+    }
+  }
+}

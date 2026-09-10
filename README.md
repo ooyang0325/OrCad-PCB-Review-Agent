@@ -3,6 +3,25 @@
 A local, human-approved placement-access prototype for classic OrCAD X PCB
 Editor / Allegro X PCB Editor 25.1 on Windows.
 
+## Install in your coding client
+
+[Installation and marketplace instructions](docs/installation.md) cover Codex,
+Claude Code, GitHub Copilot CLI/app, and direct VS Code MCP configuration.
+The repository includes portable and Claude-compatible plugin manifests,
+marketplace catalogs, shared skills, and a standard local MCP server.
+
+From a trusted checkout, use an existing Python 3.12+ interpreter:
+
+```powershell
+& 'C:\path\to\Python3\python.exe' -I -X utf8 scripts\install.py --client all
+```
+
+This prepares a versioned environment and non-overwriting client snippets;
+it does not edit client settings or install/license Cadence. Marketplace
+bootstrapping additionally needs the Windows `py` launcher. Portable installs
+are read-only by default; interactive writes require deliberate operator
+configuration and genuine human input, never Autopilot or auto-answer hooks.
+
 Development is gated by the [milestones](docs/milestones.md). The synthetic
 fixture and native read-only bridge are working in PCB Editor 25.1 S050.
 Exact proposal approval and guarded native apply/save handlers are implemented,

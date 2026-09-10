@@ -1,0 +1,20 @@
+{
+  "name": "orcad-pcb-tools",
+  "interface": {
+    "displayName": "OrCAD PCB Tools"
+  },
+  "plugins": [
+    {
+      "name": "orcad-placement",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

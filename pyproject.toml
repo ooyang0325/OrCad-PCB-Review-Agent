@@ -6,8 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "orcad-placement-agent"
 version = "0.2.0"
 description = "Human-approved local placement access for Cadence PCB Editor"
+readme = "README.md"
+authors = [{name = "oo_yang"}]
 requires-python = ">=3.12"
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/ooyang0325/OrCad-PCB-Review-Agent"
+Documentation = "https://github.com/ooyang0325/OrCad-PCB-Review-Agent/blob/main/docs/installation.md"
 
 [project.optional-dependencies]
 knowledge = ["pypdf>=6,<7", "fonttools>=4.60,<5"]

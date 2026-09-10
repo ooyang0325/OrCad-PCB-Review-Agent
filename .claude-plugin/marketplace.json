@@ -1,0 +1,14 @@
+{
+  "name": "orcad-pcb-tools",
+  "owner": {
+    "name": "oo_yang"
+  },
+  "plugins": [
+    {
+      "name": "orcad-placement",
+      "source": "./",
+      "description": "Windows-only, visually inspected PCB workflows with local reference evidence.",
+      "version": "0.2.0"
+    }
+  ]
+}
