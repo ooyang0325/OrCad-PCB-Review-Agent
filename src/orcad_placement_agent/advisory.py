@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 
 from . import knowledge
-from .protocol import MAX_BYTES, ProtocolError, Receipt, encode_rows
+from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
 from .proposals import check_snapshot
 from .session import write_json
 
@@ -25,19 +25,7 @@ def _snapshot_context(path: Path) -> dict[str, object]:
     if path.stat().st_size > MAX_BYTES:
         raise ProtocolError("Snapshot artifact exceeds the size limit.")
     data = json.loads(path.read_text(encoding="utf-8"))
-    if (
-        not isinstance(data, dict)
-        or set(data) != {"nonce", "request_id", "status", "message", "records"}
-        or not isinstance(data["records"], list)
-    ):
-        raise ProtocolError("Use an original snapshot receipt JSON, not a board binary or proposal.")
-    if any(not isinstance(row, list) for row in data["records"]):
-        raise ProtocolError("Invalid snapshot records.")
-    payload = encode_rows([
-        ["OPA", "1", data["nonce"], data["request_id"], data["status"]],
-        ["message", data["message"]], *data["records"], ["end", data["request_id"]],
-    ])
-    receipt = Receipt.decode(payload, data["nonce"], data["request_id"])
+    receipt = Receipt.from_dict(data)
     components = check_snapshot(receipt)
     return {
         "artifact": str(path.resolve()), "request_id": receipt.request_id,
@@ -57,16 +45,59 @@ def _snapshot_context(path: Path) -> dict[str, object]:
     }
 
 
+def _visual_context(path: Path) -> tuple[dict[str, object], Path]:
+    path = path.expanduser().resolve(strict=True)
+    if path.stat().st_size > MAX_BYTES:
+        raise ProtocolError("Visual metadata exceeds the size limit.")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("kind") != "pcb-visual-observation":
+        raise ProtocolError("Expected captured PCB visual-observation metadata.")
+    observation_id = identifier(data.get("observation_id"))
+    after_id = identifier(data.get("after_request_id"))
+    before_id = identifier(data.get("before_request_id"))
+    image = path.parent / f"visual-{observation_id}.png"
+    receipt = path.parent / f"{after_id}.receipt.json"
+    if (
+        path.name != f"visual-{observation_id}.json"
+        or not isinstance(data.get("image_path"), str)
+        or Path(data["image_path"]).resolve() != image
+        or not image.is_file() or not receipt.is_file() or receipt.resolve() != receipt
+    ):
+        raise ProtocolError("Visual evidence paths do not match the captured observation.")
+    with image.open("rb") as stream:
+        if stream.read(8) != b"\x89PNG\r\n\x1a\n":
+            raise ProtocolError("Captured image is not a PNG.")
+    for dimension in ("width", "height"):
+        if type(data.get(dimension)) is not int or not 0 < data[dimension] <= 8192:
+            raise ProtocolError("Invalid captured image dimensions.")
+    return {
+        "observation_id": observation_id, "before_request_id": before_id,
+        "after_request_id": after_id, "image_path": str(image),
+        "metadata_path": str(path), "width": data["width"], "height": data["height"],
+        "captured_at": data.get("captured_at"), "method": data.get("method"),
+        "editor": data.get("editor"),
+        "freshness": "Archived observation. Use pcb_inspect for a current image and native state.",
+        "limitations": "Read the PNG itself. Pixels do not prove DRC, layer completeness, or electrical correctness.",
+    }, receipt
+
+
 def build_context(
     goal: str, database: Path = knowledge.DEFAULT_DATABASE, *,
     topics: tuple[str, ...] = ("placement", "decoupling", "return-paths"),
     snapshot: Path | None = None,
+    visual: Path | None = None,
     output_directory: Path = Path(".runtime") / "advisory",
 ) -> tuple[Path, dict[str, object]]:
     if not goal.strip() or len(goal) > 2000:
         raise knowledge.KnowledgeError("Supply a nonempty review goal of at most 2000 characters.")
     if not topics or len(topics) > len(TOPIC_QUERIES) or any(topic not in TOPIC_QUERIES for topic in topics):
         raise knowledge.KnowledgeError("Select one or more of the documented PCB review topics.")
+    visual_context = None
+    if visual is not None:
+        visual_context, visual_snapshot = _visual_context(visual)
+        if snapshot is not None and snapshot.resolve() != visual_snapshot:
+            raise ProtocolError("The supplied snapshot is not the visual observation's post-capture snapshot.")
+        snapshot = visual_snapshot
     documents = knowledge.catalog(database)
     queries = []
     evidence: list[dict[str, object]] = []
@@ -84,12 +115,16 @@ def build_context(
                     continue
                 seen.add(key)
                 evidence.append({"evidence_id": f"E{len(evidence) + 1}", "topic": topic, **hit})
+    snapshot_context = _snapshot_context(snapshot) if snapshot is not None else None
+    if visual_context is not None and snapshot_context["request_id"] != visual_context["after_request_id"]:
+        raise ProtocolError("Visual observation and snapshot content have different request IDs.")
     context: dict[str, object] = {
         "schema_version": 1, "kind": "pcb-advisory-context",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "evidence_freshness": "Source metadata was checked during generation; regenerate after reference changes.",
         "goal": goal.strip(), "topics": list(dict.fromkeys(topics)),
-        "snapshot": _snapshot_context(snapshot) if snapshot is not None else None,
+        "snapshot": snapshot_context,
+        "visual": visual_context,
         "evidence": evidence, "queries": queries,
         "coverage": {
             "documents": len(documents),

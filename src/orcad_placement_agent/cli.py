@@ -93,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     context.add_argument("--database", type=Path, default=knowledge.DEFAULT_DATABASE)
     context.add_argument("--topic", action="append", choices=tuple(TOPIC_QUERIES))
     context.add_argument("--snapshot", type=Path, help="Optional saved snapshot receipt JSON; never a .brd.")
+    context.add_argument("--visual", type=Path, help="Optional visual observation metadata; links its PNG and matching snapshot.")
     context.add_argument("--output-directory", type=Path, default=Path(".runtime") / "advisory")
     context.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             path, context = build_context(
                 args.goal, args.database,
                 topics=tuple(args.topic) if args.topic else ("placement", "decoupling", "return-paths"),
-                snapshot=args.snapshot, output_directory=args.output_directory,
+                snapshot=args.snapshot, visual=args.visual, output_directory=args.output_directory,
             )
             if args.json:
                 print(json.dumps({

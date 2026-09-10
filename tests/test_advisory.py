@@ -115,12 +115,56 @@ class AdvisoryTests(unittest.TestCase):
         self.assertTrue(Path(result["path"]).is_file())
         self.assertFalse(result["authority"]["approves_board_changes"])
 
+    def visual(self):
+        snapshot = self.snapshot()
+        receipt = self.root / f"{'2' * 32}.receipt.json"
+        snapshot.rename(receipt)
+        observation_id = "3" * 32
+        image = self.root / f"visual-{observation_id}.png"
+        image.write_bytes(b"\x89PNG\r\n\x1a\noriginal test placeholder")
+        metadata = self.root / f"visual-{observation_id}.json"
+        metadata.write_text(json.dumps({
+            "kind": "pcb-visual-observation", "observation_id": observation_id,
+            "image_path": str(image), "before_request_id": "1" * 32,
+            "after_request_id": "2" * 32, "width": 100, "height": 100,
+        }), encoding="utf-8")
+        return metadata, receipt
+
+    def test_visual_packet_links_the_actual_image_and_matching_snapshot(self):
+        visual, snapshot = self.visual()
+        _, context = build_context(
+            "Review placement visually", self.database, visual=visual,
+            output_directory=self.output,
+        )
+        self.assertEqual(context["visual"]["observation_id"], "3" * 32)
+        self.assertEqual(context["snapshot"]["artifact"], str(snapshot))
+        self.assertIn("Archived", context["visual"]["freshness"])
+        self.assertFalse(context["authority"]["approves_board_changes"])
+
+    def test_visual_packet_rejects_unrelated_snapshot_or_image(self):
+        visual, _snapshot = self.visual()
+        with self.assertRaises(ProtocolError):
+            build_context(
+                "Review", self.database, visual=visual, snapshot=self.root / "other.json",
+                output_directory=self.output,
+            )
+        data = json.loads(visual.read_text(encoding="utf-8"))
+        data["image_path"] = str(self.root / "unrelated.png")
+        visual.write_text(json.dumps(data), encoding="utf-8")
+        with self.assertRaises(ProtocolError):
+            build_context("Review", self.database, visual=visual, output_directory=self.output)
+
 
 class AgentProfileTests(unittest.TestCase):
-    def test_profiles_use_supported_read_only_frontmatter(self):
+    def test_all_profiles_have_visual_tools_without_unrestricted_execution(self):
         root = Path(__file__).resolve().parents[1]
         profiles = list((root / ".github" / "agents").glob("pcb-*.agent.md"))
-        self.assertEqual(len(profiles), 2)
+        self.assertEqual(len(profiles), 3)
+        extra_tools = {
+            "pcb-placement-planner.agent.md": {"pcb_prepare_placement"},
+            "pcb-layout-reviewer.agent.md": {"pcb_execution_status"},
+            "pcb-placement-executor.agent.md": {"pcb_apply_placement", "pcb_execution_status"},
+        }
         for profile in profiles:
             text = profile.read_text(encoding="utf-8")
             frontmatter, prompt = text.split("---", 2)[1:]
@@ -128,9 +172,13 @@ class AgentProfileTests(unittest.TestCase):
                 line.split(":", 1) for line in frontmatter.splitlines() if line.strip()
             )
             self.assertTrue(lines["description"].strip())
-            self.assertEqual(json.loads(lines["tools"]), ["read", "search"])
+            self.assertEqual(
+                set(json.loads(lines["tools"])),
+                {"read", "search", "pcb_sessions", "pcb_inspect", "pcb_inspection_status"} | extra_tools[profile.name],
+            )
             self.assertLess(len(prompt), 30000)
-            self.assertIn("PDF page", prompt)
+            self.assertIn("PNG", prompt)
+            self.assertIn("observation", prompt.lower())
             self.assertIn("untrusted", prompt)
             self.assertNotIn("mcp-servers:", frontmatter)
             for filename in ("agents.md", "pcb-expertise.md", "milestones.md"):

@@ -26,6 +26,14 @@ arbitrary boards. Both the supplied original and copy were left unchanged.
 
 ## Pending exact approval
 
+The later visual execution workflow now returns actual, fitted Cadence PNGs
+with matching before/after native snapshots. The three fixture components
+and keepout are visible; the capture is limited to the bound window, with no
+desktop fallback. An exact R1 proposal from (10, 10) / 0 degrees to
+(12, 12) / 90 degrees was prepared through the extension. Its interactive
+confirmation was not supplied, so Apply was denied before dispatch and the
+proposal has no consumed approval. This does not complete M3/M4.
+
 The operator was asked to authorize the bounded synthetic-fixture acceptance
 batch below, but was unavailable. No approval was inferred, no Apply or Save
 request was executed, and no native mutation acceptance result is claimed.

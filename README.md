@@ -66,10 +66,11 @@ model provider.
 
 ## PCB expert agents
 
-The [advisory workflow](docs/agents.md) provides two read-only Copilot profiles:
-**PCB placement planner** and **PCB layout reviewer**. They use the local
-reference evidence, distinguish board facts from assumptions, and require
-source/PDF-page citations. Neither agent can run shell commands or edit a board.
+The [agent workflow](docs/agents.md) provides **PCB placement planner**,
+**PCB layout reviewer**, and **PCB placement executor** profiles. They use
+local reference evidence, distinguish board facts from assumptions, and require
+source/PDF-page citations. All can inspect the bound Cadence image through
+bounded tools; none has unrestricted shell or file-edit access.
 
 Prepare their input without starting Cadence or calling a model:
 
@@ -79,6 +80,8 @@ Prepare their input without starting Cadence or calling a model:
     --topic decoupling --topic return-paths
 ```
 
-Give the printed packet path to the planner; then give the same packet and its
-response to the reviewer. This is reference-grounded guidance, not fine-tuning
-or permission to bypass the existing native approval gates.
+Give the printed packet path to the planner, then the same packet and its
+response to the reviewer. The executor can submit an exact visually grounded
+proposal to the [interactive approval workflow](docs/agent-execution.md).
+Approval is collected from the human by the host UI, never supplied by the
+model. No implicit Save is performed, and fixture-only native limits remain.

@@ -273,6 +273,7 @@ def capture_observation(
         "view_fit_request_id": fit_request,
         "method": "Guarded display-only fit; PrintWindow client/render-full-content; no desktop fallback",
         "image_path": str(image_path), "metadata_path": str(metadata_path),
+        "before_snapshot_receipt_path": str(session.root / f"{before.request_id}.receipt.json"),
         "snapshot_receipt_path": str(session.root / f"{after.request_id}.receipt.json"),
         "limitations": "Current visible layers/framing only; inspect pixels yourself. Not DRC or electrical proof.",
     }

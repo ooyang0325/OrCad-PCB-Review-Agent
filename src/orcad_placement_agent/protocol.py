@@ -139,6 +139,24 @@ class Receipt:
     records: tuple[tuple[str, ...], ...]
 
     @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "Receipt":
+        if (
+            not isinstance(data, dict)
+            or set(data) != {"nonce", "request_id", "status", "message", "records"}
+            or not isinstance(data["records"], list)
+            or any(not isinstance(row, list) for row in data["records"])
+        ):
+            raise ProtocolError("Invalid saved receipt schema.")
+        return cls.decode(
+            encode_rows([
+                ["OPA", "1", data["nonce"], data["request_id"], data["status"]],
+                ["message", data["message"]], *data["records"],
+                ["end", data["request_id"]],
+            ]),
+            data["nonce"], data["request_id"],
+        )
+
+    @classmethod
     def decode(cls, payload: bytes, nonce: str, request_id: str) -> "Receipt":
         identifier(nonce)
         identifier(request_id)

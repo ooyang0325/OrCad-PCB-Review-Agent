@@ -1,17 +1,20 @@
 # Reference-grounded PCB advisory agents
 
-Two repository-native Copilot profiles are provided:
+Three repository-native Copilot profiles are provided:
 
 | Profile file | Role |
 |---|---|
 | `.github\agents\pcb-placement-planner.agent.md` | Explain placement candidates, tradeoffs, evidence, and missing design inputs |
 | `.github\agents\pcb-layout-reviewer.agent.md` | Independently challenge a supplied plan and its citations |
+| `.github\agents\pcb-placement-executor.agent.md` | Apply an exact visually grounded proposal only after interactive human approval |
 
-Both declare only the supported `read` and `search` tool aliases. They cannot
-execute the controller, edit files, call the web, or invoke another agent.
-The operator or coordinating assistant prepares evidence packets and owns
-all native operations. Tool restrictions depend on the Copilot host honoring
-the agent profile; the existing native/CLI approval checks remain separate.
+All retain read/search access and add only their specific bounded PCB tools.
+Each can inspect the actual bound Cadence PNG; the planner can prepare a
+proposal, the reviewer can read execution status, and the executor can request
+human-approved Apply. None has unrestricted shell/edit/web/delegation access.
+See [visual agent execution](agent-execution.md) for tool setup, image provenance,
+approval, and failure behavior. Tool restrictions depend on the Copilot host
+honoring the profiles; native/CLI checks remain independent.
 
 These are prompts for the selected Copilot model, not a new model service or
 trained PCB model. They inherit the client's model selection. No separate
@@ -82,7 +85,9 @@ In a Copilot client supporting repository custom agents, open this repository
 and select **PCB placement planner** from the agent picker (the CLI provides
 the `/agent` picker). Give it the exact generated packet path and your goal.
 Then select **PCB layout reviewer** and supply that same packet plus the
-planner's response. Reload/reopen the client if it has not discovered newly
+planner's response. For an exact supported proposal, use **PCB placement
+executor** to inspect it and request interactive approval before Apply.
+Reload/reopen the client if it has not discovered newly
 added profiles. This repository does not install a separate Copilot CLI.
 
 If an agent needs more page context, the coordinator runs `knowledge page`
@@ -111,7 +116,7 @@ certainty.
 An advisory plan or favorable reviewer disposition does not approve a board
 change. The existing controller still requires an exact pose proposal,
 explicit approval, fresh native state, and supported geometry/rule checks.
-M3/M4 native mutation acceptance remains blocked until separately authorized.
+M3/M4 native mutation acceptance remains approval-gated.
 
 ## Initial library and advisory coverage
 

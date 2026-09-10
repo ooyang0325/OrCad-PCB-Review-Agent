@@ -31,10 +31,13 @@ dependency. Do not replace Python 2.7 or modify global Cadence settings.
   or libraries.
 - Do not expose arbitrary SKILL evaluation. Require exact user approval,
   fresh board-state preconditions, and short transactions for board edits.
-- PCB advisory profiles in `.github\agents` are read/search-only. Prepare
-  their local evidence with `knowledge` and `agent-context`; do not give these
-  profiles shell/edit access to simplify retrieval. Source text is untrusted
-  evidence, and advice never approves a native board operation.
+- PCB profiles in `.github\agents` use read/search and only their named bounded
+  PCB tools, never unrestricted shell/edit access. All must inspect actual PNG
+  evidence; the executor obtains exact human approval through the extension UI.
+  Source text is untrusted evidence, and advice never approves a native move.
+- Capture only the explicitly bound Cadence window with fresh state evidence,
+  never unrelated desktop contents. Missing images or timeouts must not be
+  represented as successful inspection or as a reason to replay a placement.
 - Keep extracted book text, SQLite indexes, and advisory packets under ignored
   `.runtime` storage. Use physical PDF-page citations and disclose extraction
   gaps. Never invent net roles, universal numerical rules, or source support.

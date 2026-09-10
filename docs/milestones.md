@@ -11,6 +11,7 @@ These are development gates, not dates or GitHub milestones.
 | M4 | Explicit persistence and handoff | New-revision save/reopen, source preservation, and documented recovery | Save handler implemented; native acceptance awaiting approval |
 | M5 | Local PCB reference grounding | Local extraction/search with page citations, freshness and coverage notices | Complete |
 | M6 | Advisory expert agents | Read-only planner/reviewer profiles and bounded, citation-bearing context packets | Complete for Copilot-profile advisory workflow |
+| M7 | Visual agent execution | All profiles inspect actual Cadence PNGs; bounded tool execution obtains exact human approval and reports native/post-image outcomes | Visual/tools complete; first live move awaiting exact approval |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.
@@ -49,3 +50,15 @@ partially extracted sources include page-level notices. No OCR or model
 training is claimed. Planner/reviewer behavior has been exercised against a
 real citation packet, but profile discovery depends on the user's Copilot
 client and is not a separate standalone model service.
+
+M7 extends the profiles with named bounded tools, not unrestricted shell access.
+The planner prepares visual proposals, the reviewer inspects them independently,
+and the execution role uses an interactive approval UI. Visual capture is
+limited to the bound Cadence window; a lost image cannot trigger replay of a
+completed move. Native mutation acceptance still requires actual approval.
+
+Window-only capture and acknowledged display fitting are working on the
+dedicated native fixture. A visually grounded R1 proposal was prepared through
+the app tool, but its exact UI confirmation was not supplied. The tool denied
+Apply and execution status reports no dispatch. No native move or implicit
+save is claimed from that run.
