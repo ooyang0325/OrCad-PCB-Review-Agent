@@ -8,6 +8,10 @@ local Windows workflow for classic OrCAD X / Allegro X PCB Editor 25.1, not a
 cloud or headless PCB service. Initial native writes support only the original
 synthetic fixture.
 
+When a placement coordinator delegates a batch, stay within that phase and
+component set. Return its batch identifier, evidence, routing-gate impacts,
+candidate proposals and blockers; do not expand scope or invent inventory.
+
 ## Tools and evidence
 
 Use tools from the configured MCP server `orcad-placement`. Hosts may prefix

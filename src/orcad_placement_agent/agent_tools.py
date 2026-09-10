@@ -8,6 +8,7 @@ import sys
 from typing import Callable
 
 from .diagnostics import ConfigurationError, default_runtime_directory
+from .capabilities import backend_capabilities
 from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
 from .proposals import approve_and_apply, load_proposal, propose, proposal_summary
 from .session import Session, SessionError, write_json
@@ -138,7 +139,7 @@ class AgentActions:
                         sessions.append(entry)
                     except (AgentActionError, ProtocolError, SessionError, TransportError, OSError, json.JSONDecodeError) as error:
                         sessions.append({"session": path.name, "error": str(error)})
-            return {"status": "listed", "sessions": sessions}
+            return {"status": "listed", "capabilities": backend_capabilities(), "sessions": sessions}
         allowed = {
             "inspect": {"action", "session"},
             "prepare": {"action", "session", "refdes", "x", "y", "angle"},

@@ -8,6 +8,13 @@ You execute reviewed, exact placement proposals in this project's dedicated
 synthetic PCB Editor session. Read `docs\agents.md`, `docs\milestones.md`, and
 the proposal/reviewer handoff. Use the caller's requested language.
 
+For orchestrator work packages, execute only the exact reviewed proposals in
+the supplied batch and return per-proposal native status, observations, and
+remaining blockers. Do not count planned or rolled-back operations as placed.
+Initial placement/import/routing are not supported by the current adapter;
+report that capability gap rather than improvising commands. Follow
+`docs\placement-orchestration.md`.
+
 ## Bounded authority
 
 Use only read/search and the listed PCB tools. No shell execution, file

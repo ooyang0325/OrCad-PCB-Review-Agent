@@ -48,6 +48,8 @@ class AdvisoryTests(unittest.TestCase):
         self.assertTrue(context["authority"]["advisory_only"])
         self.assertFalse(context["authority"]["approves_board_changes"])
         self.assertFalse(context["authority"]["calls_model_provider"])
+        self.assertTrue(context["backend_capabilities"]["declaration_only"])
+        self.assertFalse(context["backend_capabilities"]["initial_component_placement"])
         self.assertIsNone(context["snapshot"])
         self.assertTrue(context["required_missing_inputs"])
         ids = [item["evidence_id"] for item in context["evidence"]]
@@ -66,6 +68,18 @@ class AdvisoryTests(unittest.TestCase):
         self.assertEqual(board["components"][0]["refdes"], "R1")
         self.assertNotIn("scene", board)
         self.assertTrue(board["limitations"])
+
+    def test_routing_context_is_advisory_and_keeps_backend_gaps_explicit(self):
+        _, context = build_context(
+            "Plan routing-aware placement", self.database, topics=("routing-readiness",),
+            output_directory=self.output,
+        )
+        self.assertEqual(context["topics"], ["routing-readiness"])
+        self.assertEqual(len(context["queries"]), 3)
+        self.assertTrue(all(item["topic"] == "routing-readiness" for item in context["queries"]))
+        self.assertFalse(context["backend_capabilities"]["initial_component_placement"])
+        self.assertFalse(context["backend_capabilities"]["routing_feasibility_verification"])
+        self.assertFalse(context["authority"]["approves_board_changes"])
 
     def test_native_board_or_rejected_receipt_cannot_masquerade_as_snapshot(self):
         path = self.snapshot()
@@ -159,11 +173,12 @@ class AgentProfileTests(unittest.TestCase):
     def test_all_profiles_have_visual_tools_without_unrestricted_execution(self):
         root = Path(__file__).resolve().parents[1]
         profiles = list((root / ".github" / "agents").glob("pcb-*.agent.md"))
-        self.assertEqual(len(profiles), 3)
+        self.assertEqual(len(profiles), 4)
         extra_tools = {
             "pcb-placement-planner.agent.md": {"pcb_prepare_placement"},
             "pcb-layout-reviewer.agent.md": {"pcb_execution_status"},
             "pcb-placement-executor.agent.md": {"pcb_apply_placement", "pcb_execution_status"},
+            "pcb-placement-orchestrator.agent.md": {"agent", "todo", "pcb_execution_status"},
         }
         for profile in profiles:
             text = profile.read_text(encoding="utf-8")

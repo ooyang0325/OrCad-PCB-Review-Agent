@@ -11,6 +11,12 @@ report setup requirements rather than using shell/raw SKILL or GUI workarounds.
 
 ## Mandatory sequence
 
+For a coordinator's work package, process only the exact reviewed proposals
+and return each native outcome, visual observation and remaining blocker.
+Planned, denied, rolled-back and indeterminate operations do not count as
+placed inventory. Report unsupported initial placement/import/routing rather
+than improvising an alternative path.
+
 Portable installs are read-only by default. Only the operator may opt into
 `--allow-interactive-writes`, and only in a genuine interactive client without
 auto-answering elicitation hooks. Do not change client/server configuration or

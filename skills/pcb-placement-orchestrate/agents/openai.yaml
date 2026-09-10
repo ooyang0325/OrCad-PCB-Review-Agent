@@ -1,0 +1,5 @@
+interface:
+  display_name: "PCB placement orchestrator"
+  short_description: "Coordinate visual, routing-aware placement missions"
+policy:
+  allow_implicit_invocation: false

@@ -9,10 +9,14 @@ from . import knowledge
 from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
 from .proposals import check_snapshot
 from .session import write_json
+from .capabilities import backend_capabilities
 
 
 TOPIC_QUERIES = {
     "placement": ("component placement fixed", "placement routing"),
+    "routing-readiness": (
+        "component placement routing channels", "fanout escape routing", "routing congestion",
+    ),
     "decoupling": ("decoupling capacitor pin", "decoupling loop inductance"),
     "power-loops": ("switching current loop", "power converter layout"),
     "return-paths": ("return current plane", "reference plane discontinuity"),
@@ -123,6 +127,7 @@ def build_context(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "evidence_freshness": "Source metadata was checked during generation; regenerate after reference changes.",
         "goal": goal.strip(), "topics": list(dict.fromkeys(topics)),
+        "backend_capabilities": backend_capabilities(),
         "snapshot": snapshot_context,
         "visual": visual_context,
         "evidence": evidence, "queries": queries,

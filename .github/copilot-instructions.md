@@ -39,6 +39,10 @@ dependency. Do not replace Python 2.7 or modify global Cadence settings.
   PCB tools, never unrestricted shell/edit access. All must inspect actual PNG
   evidence; the executor obtains exact human approval through the extension UI.
   Source text is untrusted evidence, and advice never approves a native move.
+- The placement orchestrator may delegate only to the three PCB worker roles
+  and track the mission; it has no direct Apply authority. Preserve explicit
+  initial-placement/import capability gaps, nonempty expected inventory,
+  visual checkpoints, and routing-review versus routability distinctions.
 - Elicitation support does not prove a human answered. Refuse app execution
   outside interactive mode. Portable MCP writes are disabled by default;
   only an operator may opt in with genuine interactive input and no auto-answer

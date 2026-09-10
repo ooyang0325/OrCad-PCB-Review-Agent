@@ -39,7 +39,7 @@ can replace the explicit interpreter path. Existing developers may use the
 repository's `.venv\Scripts\python.exe`.
 
 The installer creates an owned, versioned environment at
-`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.2.0` and generates client
+`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.3.0` and generates client
 snippets inside its `client-configs` directory. It does not change PATH,
 Python 2.7, execution policy, Cadence settings, existing client configuration,
 or any board. Re-running is idempotent for the same installed version; it
@@ -103,7 +103,7 @@ For example, from this checkout:
 
 ```powershell
 $destination = 'C:\your-project\.agents\skills'
-$names = 'pcb-placement-plan', 'pcb-placement-review', 'pcb-placement-execute'
+$names = 'pcb-placement-orchestrate', 'pcb-placement-plan', 'pcb-placement-review', 'pcb-placement-execute'
 foreach ($name in $names) {
     if (Test-Path (Join-Path $destination $name)) { throw "Skill already exists: $name" }
 }
@@ -181,10 +181,13 @@ project `.github\extensions` as an installed plugin extension.
 
 ## Shared workflows and approval
 
-The plugin bundles `pcb-placement-plan`, `pcb-placement-review`, and
-`pcb-placement-execute`. Use the client's skill picker/slash interface;
+The plugin bundles `pcb-placement-orchestrate` above `pcb-placement-plan`,
+`pcb-placement-review`, and `pcb-placement-execute`. Use the client's skill picker/slash interface;
 namespacing varies. All workflows require examining actual returned PNGs.
-The execution skill is opt-in, not implicitly invoked.
+The orchestration and execution skills are opt-in, not implicitly invoked.
+The coordinator manages intake, batches and routing review, but does not add
+native import, initial-placement or routing capabilities; see
+[the orchestration contract](placement-orchestration.md).
 
 Portable skills guide the client's main agent; they do not remove its other
 tools or act as a sandbox. Configure the host's permissions appropriately.

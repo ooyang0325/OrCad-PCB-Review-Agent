@@ -126,7 +126,7 @@ def create_server(
 
     @server.tool(annotations=READ_ONLY)
     def pcb_sessions() -> CallToolResult:
-        """List recorded sessions; a binding is not proof that its board is currently open."""
+        """List recorded sessions and declared backend capabilities; neither proves live readiness."""
         return result(dispatch({"action": "sessions"}))
 
     @server.tool(annotations=READ_ONLY)
@@ -139,7 +139,10 @@ def create_server(
         session: SessionName, refdes: Refdes, x: Coordinate, y: Coordinate,
         angle: Literal["0", "90", "180", "270"],
     ) -> CallToolResult:
-        """Prepare a visually grounded absolute-mm pose. Does not move or approve anything."""
+        """Prepare a visually grounded pose for an already-placed fixture component.
+
+        Does not import a design, place an unplaced symbol, move, or approve anything.
+        """
         return result(dispatch({
             "action": "prepare", "session": session, "refdes": refdes,
             "x": x, "y": y, "angle": angle,

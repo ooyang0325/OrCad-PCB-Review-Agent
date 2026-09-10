@@ -8,12 +8,14 @@ operations, not shell access or arbitrary SKILL evaluation.
 
 | Role | Native capabilities |
 |---|---|
+| PCB placement orchestrator | Inspect mission state, track phases and delegate the three workers; no direct prepare/apply/save authority |
 | PCB placement planner | Inspect the bound board visually and prepare an exact proposal |
 | PCB layout reviewer | Independently inspect current placement and read recorded execution outcomes |
 | PCB placement executor | Inspect, request interactive human approval, apply the exact proposal in memory, and inspect the outcome |
 
-All three profiles include `pcb_inspect` and must examine the returned PNG.
-None has unrestricted `execute`, `edit`, `web`, or agent-delegation tools.
+All four profiles include `pcb_inspect` and must examine the returned PNG.
+None has unrestricted `execute`, `edit`, or `web` tools. Only the orchestrator
+has delegation/task-tracking tools, constrained by its PCB-role handoff policy.
 If a host does not provide the named tools or image understanding, the agent
 must report the missing capability instead of using a shell/GUI workaround.
 
@@ -21,10 +23,10 @@ must report the missing capability instead of using a shell/GUI workaround.
 
 | Tool | Effect |
 |---|---|
-| `pcb_sessions` | List recorded staged sessions; does not prove which board is open |
+| `pcb_sessions` | List recorded staged sessions and declared backend scope; neither proves live readiness |
 | `pcb_inspect` | Read fresh native state around capture of only the bound Cadence window |
 | `pcb_inspection_status` | Report an unresolved read-only snapshot, or reconcile its exact request ID without replay |
-| `pcb_prepare_placement` | Prepare an absolute millimeter/orthogonal-angle pose linked to current visual evidence; no movement |
+| `pcb_prepare_placement` | Prepare a pose for an already-placed fixture symbol; no initial placement, import, or movement |
 | `pcb_apply_placement` | Obtain the human's exact confirmation through the host UI, then apply once in memory |
 | `pcb_execution_status` | Read or reconcile the result of an already prepared proposal without replaying it |
 

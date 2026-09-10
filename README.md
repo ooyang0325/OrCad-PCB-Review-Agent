@@ -85,8 +85,9 @@ model provider.
 
 ## PCB expert agents
 
-The [agent workflow](docs/agents.md) provides **PCB placement planner**,
-**PCB layout reviewer**, and **PCB placement executor** profiles. They use
+The [agent workflow](docs/agents.md) provides **PCB placement orchestrator**
+above **PCB placement planner**, **PCB layout reviewer**, and **PCB placement
+executor**. They use
 local reference evidence, distinguish board facts from assumptions, and require
 source/PDF-page citations. All can inspect the bound Cadence image through
 bounded tools; none has unrestricted shell or file-edit access.
@@ -104,6 +105,15 @@ response to the reviewer. The executor can submit an exact visually grounded
 proposal to the [interactive approval workflow](docs/agent-execution.md).
 Approval is collected from the human by the host UI, never supplied by the
 model. No implicit Save is performed, and fixture-only native limits remain.
+
+For a full mission, select **PCB placement orchestrator** or invoke the portable
+`pcb-placement-orchestrate` skill. It manages intake, functional floorplanning,
+dependency-ordered batches, independent review, execution handoffs and
+[routing-aware completion gates](docs/placement-orchestration.md).
+**It does not add native import, initial placement of unplaced components, or
+routing.** Those current backend gaps remain explicit blockers to an automatic
+zero-components-to-fully-placed run; the coordinator never hides them or calls
+an empty inventory complete.
 
 ## Portable clients
 

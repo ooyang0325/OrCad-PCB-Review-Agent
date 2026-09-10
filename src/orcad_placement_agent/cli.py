@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
                 display_path = path.relative_to(cwd) if path.is_relative_to(cwd) else path
                 print(f"Advisory context: {display_path}")
                 print(f"Evidence candidates: {len(context['evidence'])}; no board or model operation was performed.")
-                print("Open this packet with pcb-placement-planner, then pcb-layout-reviewer.")
+                print("Use pcb-placement-orchestrator for a staged mission, or the planner/reviewer for a focused review.")
             return 0
         if args.command == "knowledge":
             return _knowledge_command(args)

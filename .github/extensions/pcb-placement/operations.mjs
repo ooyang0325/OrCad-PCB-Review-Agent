@@ -78,13 +78,13 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
 
     const tools = [
         tool("pcb_sessions",
-            "List recorded managed PCB sessions. A listed binding is not proof that its board is currently open; do not select an unrelated session.",
+            "List recorded managed PCB sessions and declared backend capabilities. Neither proves live readiness; do not select an unrelated session.",
             schema({}), "sessions", []),
         tool("pcb_inspect",
             "Capture only the bound Cadence window and return its PNG plus fresh before/after snapshots. Visually inspect this image; pixels alone do not prove DRC or electrical correctness.",
             schema({ session: sessionProperty }), "inspect", ["session"]),
         tool("pcb_prepare_placement",
-            "Prepare one exact fixture-component pose, with a current native image and snapshot evidence. Does not move or approve anything. Target angles are 0/90/180/270 degrees, absolute millimeters, component-origin pivot.",
+            "Prepare one exact pose for an already-placed fixture component, with current native image and snapshot evidence. Does not import a design, initially place an unplaced symbol, move, or approve anything. Targets are absolute millimeters and 0/90/180/270 degrees about the component origin.",
             schema({
                 session: sessionProperty,
                 refdes: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,30}$" },

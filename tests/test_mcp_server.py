@@ -76,6 +76,19 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(image.mime_type, "image/png")
             self.assertTrue(result.structured_content["scene_native"]["opaque_scene_omitted_from_display"])
 
+    async def test_session_listing_exposes_declared_scope_without_native_access(self):
+        from mcp import Client
+        from orcad_placement_agent.agent_tools import AgentActions
+        from orcad_placement_agent.mcp_server import create_server
+
+        server = create_server(lambda: AgentActions(Path(self.temp.name)))
+        async with Client(server) as client:
+            result = await client.call_tool("pcb_sessions", {})
+            self.assertFalse(result.is_error)
+            self.assertEqual(result.structured_content["sessions"], [])
+            self.assertTrue(result.structured_content["capabilities"]["declaration_only"])
+            self.assertFalse(result.structured_content["capabilities"]["initial_component_placement"])
+
     async def test_missing_elicitation_never_applies_in_either_protocol_mode(self):
         from mcp import Client, MCPError
 

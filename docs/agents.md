@@ -1,9 +1,10 @@
 # Reference-grounded PCB advisory agents
 
-Three repository-native Copilot profiles are provided:
+Four repository-native Copilot profiles are provided:
 
 | Profile file | Role |
 |---|---|
+| `.github\agents\pcb-placement-orchestrator.agent.md` | Supervise intake, staged batches, routing-aware review and evidence-based completion across the three workers |
 | `.github\agents\pcb-placement-planner.agent.md` | Explain placement candidates, tradeoffs, evidence, and missing design inputs |
 | `.github\agents\pcb-layout-reviewer.agent.md` | Independently challenge a supplied plan and its citations |
 | `.github\agents\pcb-placement-executor.agent.md` | Apply an exact visually grounded proposal only after interactive human approval |
@@ -11,7 +12,9 @@ Three repository-native Copilot profiles are provided:
 All retain read/search access and add only their specific bounded PCB tools.
 Each can inspect the actual bound Cadence PNG; the planner can prepare a
 proposal, the reviewer can read execution status, and the executor can request
-human-approved Apply. None has unrestricted shell/edit/web/delegation access.
+human-approved Apply. The orchestrator alone has delegation/task-tracking
+access and is instructed to use only those three PCB roles. None has
+unrestricted shell/edit/web access. Delegation is not approval authority.
 See [visual agent execution](agent-execution.md) for tool setup, image provenance,
 approval, and failure behavior. Tool restrictions depend on the Copilot host
 honoring the profiles; native/CLI checks remain independent.
@@ -63,6 +66,13 @@ PDF page numbers are one-based file pages, not the printed page numbers.
 
 ## Prepare an agent packet
 
+For a full placement mission, start with **PCB placement orchestrator** and
+the [orchestration contract](placement-orchestration.md). Supply the approved
+design/inventory, constraints, exact session if available, and evidence packet.
+The coordinator distinguishes blank, imported-unplaced, partial, and routed
+states. Current initial-placement/import/routing gaps are explicit execution
+blockers, not permission to improvise a backend.
+
 ```powershell
 .\.venv\Scripts\python.exe -m orcad_placement_agent agent-context `
     --goal "Review decoupling and return-path placement; identify missing inputs" `
@@ -73,7 +83,7 @@ The command writes a new local `.runtime\advisory\context-*.json` and prints its
 path. It retrieves evidence candidates; it does not perform an LLM review.
 Use `--json` for an ASCII-safe, machine-readable packet path and authority
 summary, including when the workspace path contains non-ASCII characters.
-Supported topics are placement, decoupling, power-loops, return-paths,
+Supported topics are placement, routing-readiness, decoupling, power-loops, return-paths,
 manufacturing, and thermal.
 
 Optionally add `--snapshot <saved-snapshot.receipt.json>` from the existing
@@ -90,14 +100,20 @@ executor** to inspect it and request interactive approval before Apply.
 Reload/reopen the client if it has not discovered newly
 added profiles. This repository does not install a separate Copilot CLI.
 
-If an agent needs more page context, the coordinator runs `knowledge page`
-and supplies its bounded result. The profiles intentionally do not have shell
-access just to retrieve extra text.
+If an app agent needs more page context than its packet contains, the operator
+runs `knowledge page` and supplies the bounded result. The portable workflows
+can instead use their configured MCP reference tools. The app profiles
+intentionally do not gain shell access just to retrieve extra text.
 
 The profiles use the documented [GitHub custom-agent frontmatter and tool
 aliases](https://docs.github.com/en/copilot/reference/custom-agents-configuration).
 Client discovery/UI behavior is separate from the local search and packet
 commands.
+
+`pcb_sessions` includes a declared capability inventory. `agent-context` also
+records the generator's declaration for offline planning; neither establishes
+current live readiness. The coordinator must not confuse full placement with
+a routing review, proven routability, completed routing, or a saved artifact.
 
 ## Privacy and authority
 

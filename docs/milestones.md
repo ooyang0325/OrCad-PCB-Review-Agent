@@ -13,6 +13,7 @@ These are development gates, not dates or GitHub milestones.
 | M6 | Advisory expert agents | Read-only planner/reviewer profiles and bounded, citation-bearing context packets | Complete for Copilot-profile advisory workflow |
 | M7 | Visual agent execution | All profiles inspect actual Cadence PNGs; bounded tool execution obtains exact human approval and reports native/post-image outcomes | Visual/tools complete; first live move awaiting exact approval |
 | M8 | Portable client distribution | Standard MCP, packaged native assets, safe setup/config generation, and Codex/Claude/Copilot plugin-marketplace manifests | Complete packaging; client prerequisites and repository access required |
+| M9 | Placement mission coordinator | Fourth agent/portable workflow delegates intake, floorplanning, batches and routing-aware review with explicit inventory/capability gates | Coordinator implemented; native initial-placement/import/routing gaps remain |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.
@@ -71,3 +72,10 @@ Portable writes are read-only by default because an MCP elicitation response
 does not establish human provenance; only an operator may opt into genuine
 interactive use without auto-answer hooks. Actual client marketplace UIs and
 native write acceptance are not implied by package/SDK conformance.
+
+M9 adds supervision above the existing three workers. It must distinguish
+no logical design from zero physical placements, reject vacuous 0/0 completion,
+and report routing review separately from proven routability or completed
+routing. The current agent-accessible backend still cannot perform initial
+placement; adding the coordinator does not make an automatic blank-board
+mission executable. See [placement orchestration](placement-orchestration.md).

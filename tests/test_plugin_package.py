@@ -64,7 +64,7 @@ class PluginPackageTests(unittest.TestCase):
 
     def test_portable_skills_are_self_contained_and_visual(self):
         skills = list((self.root / "skills").glob("*/SKILL.md"))
-        self.assertEqual(len(skills), 3)
+        self.assertEqual(len(skills), 4)
         for path in skills:
             text = path.read_text(encoding="utf-8")
             frontmatter, body = text.split("---", 2)[1:]
@@ -82,6 +82,10 @@ class PluginPackageTests(unittest.TestCase):
         self.assertIn("read-only by default", execution)
         self.assertIn("allow_implicit_invocation: false",
                       (self.root / "skills" / "pcb-placement-execute" / "agents" / "openai.yaml").read_text())
+        coordinator = self.root / "skills" / "pcb-placement-orchestrate"
+        self.assertIn("disable-model-invocation: true", (coordinator / "SKILL.md").read_text())
+        self.assertIn("allow_implicit_invocation: false",
+                      (coordinator / "agents" / "openai.yaml").read_text())
 
     def test_bootstraps_do_not_bypass_policies_or_modify_client_settings(self):
         install = (self.root / "scripts" / "install.py").read_text(encoding="utf-8")
