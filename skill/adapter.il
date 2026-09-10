@@ -1,4 +1,10 @@
 ; Public commands are GENERAL gates. Only private callbacks enter interactive mode.
+opaRequire(!(boundp('opaDispatchActive) && opaDispatchActive)
+    "Do not reload the adapter during an active request.")
+opaReloadHalted = if(boundp('opaLoadedNonce) && opaLoadedNonce == opaNonce &&
+    boundp('opaHalted) then opaHalted else nil)
+opaHalted = t
+
 procedure(opaBootstrapGuard()
     let((parent leaf)
         opaRequire(boundp('opaRoot) && boundp('opaNonce) && boundp('opaBoardPath)
@@ -183,16 +189,43 @@ procedure(opaSnapshot(@rest arguments) opaCommand("snapshot" arguments))
 procedure(opaApply(@rest arguments) opaCommand("apply" arguments))
 procedure(opaSave(@rest arguments) opaCommand("save" arguments))
 
+procedure(opaViewFit(@rest arguments)
+    let((identifier trusted result)
+        opaError = "Display-only view fit failed."
+        result = errset(
+            progn(
+                opaRequire(length(arguments) == 2 && opaID(car(arguments)) &&
+                    opaID(cadr(arguments)) "View fit needs an exact request ID and session nonce.")
+                identifier = car(arguments)
+                opaBootstrapGuard()
+                trusted = t
+                opaRequire(cadr(arguments) == opaNonce "View-fit session changed.")
+                opaBoardGuard()
+                opaRequire(!opaDispatchActive && axlOKToProceed()
+                    "Editor is busy; view fitting did not finish an active command.")
+                opaRequire(!isFile(opaPath(identifier ".result.csv"))
+                    "View-fit request already completed.")
+                opaRequire(axlWindowFit() "Cannot fit the dedicated board view.")
+                t
+            ) t)
+        when(identifier && trusted && !isFile(opaPath(identifier ".result.csv"))
+            opaResult(identifier if(result then "snapshot" else "rejected")
+                if(result then "Display-only view fit completed." else opaError) nil))
+        unless(identifier && trusted axlMsgPut(strcat("OPA: " opaError)))
+        t
+    )
+)
+
 unless(boundp('opaDispatchActive) opaDispatchActive = nil)
 opaRequire(!opaDispatchActive "Do not reload the adapter during an active request.")
-unless(boundp('opaLoadedNonce) && opaLoadedNonce == opaNonce opaHalted = nil)
-opaLoadedNonce = opaNonce
 opaSnapshots = nil
 opaFrozen = nil
 opaDispatchResult = nil
 opaMutationBegan = nil
 opaBootstrapGuard()
 foreach(event '(open close save)
+    ; Remove only this adapter's callback; other integrations remain untouched.
+    axlTriggerClear(event 'opaInvalidate)
     opaRequire(axlTriggerSet(event 'opaInvalidate) "Cannot register snapshot invalidation."))
 opaRequire(axlCmdRegister("opa__inspect" 'opaInspectPrivate ?cmdType "interactive")
     "Cannot register private read-only inspection.")
@@ -204,3 +237,7 @@ opaRequire(axlCmdRegister("opa_apply" 'opaApply ?cmdType "general")
     "Cannot register apply gate.")
 opaRequire(axlCmdRegister("opa_save" 'opaSave ?cmdType "general")
     "Cannot register save gate.")
+opaRequire(axlCmdRegister("opa_viewfit" 'opaViewFit ?cmdType "general")
+    "Cannot register display-only fit gate.")
+opaLoadedNonce = opaNonce
+opaHalted = opaReloadHalted
