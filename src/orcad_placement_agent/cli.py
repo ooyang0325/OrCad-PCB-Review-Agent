@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+import sqlite3
 import sys
 import uuid
 
@@ -18,6 +19,7 @@ from .protocol import ProtocolError, Request
 from .proposals import approve_and_apply, load_proposal, propose, proposal_summary
 from .session import Session, SessionError, stage_session
 from .transport import IndeterminateDelivery, TransportError, WindowsAPI
+from . import knowledge
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,9 +66,30 @@ def main(argv: list[str] | None = None) -> int:
             sub.add_argument("--angle", required=True, help="Absolute degrees: 0, 90, 180, 270.")
         if command == "apply":
             sub.add_argument("--proposal", required=True, help="The full SHA256 proposal identifier.")
+    references = commands.add_parser(
+        "knowledge", help="Index and search local PCB reference PDFs; no network or board access."
+    )
+    reference_commands = references.add_subparsers(dest="knowledge_command", required=True)
+    for operation in ("index", "catalog", "search", "page"):
+        sub = reference_commands.add_parser(operation)
+        sub.add_argument("--database", type=Path, default=knowledge.DEFAULT_DATABASE)
+        sub.add_argument("--json", action="store_true")
+        if operation == "index":
+            sub.add_argument("--books", type=Path, default=knowledge.DEFAULT_BOOKS)
+            sub.add_argument("--rebuild", action="store_true", help="Re-extract all PDFs, including unchanged metadata.")
+        elif operation == "search":
+            sub.add_argument("query")
+            sub.add_argument("--limit", type=int, default=5)
+        elif operation == "page":
+            sub.add_argument("source", help="Exact source name returned by search/catalog.")
+            sub.add_argument("--page", type=int, required=True, dest="page_number")
+            sub.add_argument("--offset", type=int, default=0)
+            sub.add_argument("--characters", type=int, default=1500)
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "knowledge":
+            return _knowledge_command(args)
         if args.command == "editors":
             from dataclasses import asdict
 
@@ -101,7 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     except IndeterminateDelivery as error:
         print(f"INDETERMINATE: {error}", file=sys.stderr)
         return 3
-    except (ConfigurationError, SessionError, ProtocolError, TransportError, OSError, json.JSONDecodeError) as error:
+    except (ConfigurationError, SessionError, ProtocolError, TransportError,
+            knowledge.KnowledgeError, sqlite3.Error, OSError, json.JSONDecodeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
     except EOFError:
@@ -158,3 +182,39 @@ def _session_command(args: argparse.Namespace) -> int:
             ))
     print(json.dumps(receipt.to_dict(), indent=2))
     return 0 if receipt.status in {"snapshot", "applied", "saved"} else 1
+
+
+def _knowledge_command(args: argparse.Namespace) -> int:
+    if args.knowledge_command == "index":
+        result = knowledge.index_books(args.books, args.database, rebuild=args.rebuild)
+    elif args.knowledge_command == "catalog":
+        result = {"documents": knowledge.catalog(args.database)}
+    elif args.knowledge_command == "search":
+        result = knowledge.search(args.query, args.database, limit=args.limit)
+    else:
+        result = knowledge.page(
+            args.source, args.page_number, args.database,
+            offset=args.offset, characters=args.characters,
+        )
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=True))
+    elif "documents" in result:
+        if args.knowledge_command == "index":
+            print(f"Updated {result['updated']}; unchanged {result['unchanged']}; removed {result['removed']}.")
+        for item in result["documents"]:
+            print(
+                f"{item['source']}: {item['indexed_pages']}/{item['pdf_pages']} pages; "
+                f"{item['status']}; fresh={item['fresh']}; {len(item['notices'])} notice(s)"
+            )
+        print("No OCR is performed. Use --json to inspect per-document/page notices.")
+    elif "hits" in result:
+        print(f"Match mode: {result['match_mode']}")
+        for hit in result["hits"]:
+            print(f"\n{hit['citation']}\n{hit['excerpt']}")
+        if not result["hits"]:
+            print("No matching indexed evidence was found.")
+    else:
+        print(f"{result['citation']}\n{result['text']}")
+        if result["truncated"]:
+            print(f"[Excerpt at offset {result['offset']}; {result['total_characters']} characters on page.]")
+    return 0

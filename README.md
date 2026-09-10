@@ -55,3 +55,11 @@ fixture. A supplied real board can be read using the separate probe, but is
 explicitly rejected by the placement adapter rather than treated as safe.
 `apply` and `save` remain experimental until M3/M4 acceptance is approved and
 completed.
+
+## Local reference search
+
+The optional [reference-search tool](docs/reference-search.md) indexes the
+supplied PCB books locally and retrieves bounded excerpts with source/PDF-page
+citations. Install it with `pip install -e ".[knowledge]"` using the repository
+virtual environment. It does not upload documents, operate Cadence, or call a
+model provider.

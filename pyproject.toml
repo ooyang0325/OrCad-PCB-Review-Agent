@@ -9,6 +9,9 @@ description = "Human-approved local placement access for Cadence PCB Editor"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.optional-dependencies]
+knowledge = ["pypdf>=6,<7", "fonttools>=4.60,<5"]
+
 [project.scripts]
 orcad-placement-agent = "orcad_placement_agent.cli:main"
 
