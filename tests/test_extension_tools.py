@@ -65,6 +65,20 @@ assert.equal(JSON.parse(failedImage.textResultForLlm).status, "applied");
 assert.equal(h.requests.filter(r => r.action === "apply").length, 1);
 for (const tool of h.tools) assert.equal(tool.parameters.additionalProperties, false);
 assert.deepEqual(Object.keys(h.apply.parameters.properties), ["session", "proposal"]);
+let modeChecks = 0;
+let dispatched = false;
+const switched = createPlacementTools({
+    canPrompt: async () => ++modeChecks === 1,
+    requestInput: async () => `APPLY ${digest}`,
+    imageResult: async () => ({ type: "image", mimeType: "image/png", data: "test" }),
+    run: async (request) => {
+        if (request.action === "apply") dispatched = true;
+        return { status: "prepared", summary: "R1 exact move", working_board: "working.brd",
+            warning: "Memory only", visual };
+    },
+}).find(t => t.name === "pcb_apply_placement");
+assert.equal((await switched.handler(args)).resultType, "denied");
+assert.equal(dispatched, false);
 console.log("Bounded extension approval and image-outcome cases passed.");
 """
 

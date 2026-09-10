@@ -130,12 +130,12 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
         handler: async (args) => {
             try {
                 requireFields(args, ["session", "proposal"]);
-                if (!canPrompt()) {
+                if (!await canPrompt()) {
                     return {
                         resultType: "denied",
                         textResultForLlm: JSON.stringify({
                             status: "denied", dispatched: false,
-                            reason: "This host cannot obtain interactive human approval. No native command was sent.",
+                            reason: "Placement needs interactive mode and human UI support. Autopilot/unknown modes are refused; no native command was sent.",
                         }),
                     };
                 }
@@ -149,12 +149,12 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
                     "Cancel or leave blank to keep the board unchanged.",
                     { title: "Exact placement approval", minLength: 70, maxLength: 70 },
                 );
-                if (answer !== expected) {
+                if (answer !== expected || !await canPrompt()) {
                     return {
                         resultType: "denied",
                         textResultForLlm: JSON.stringify({
                             status: "denied", dispatched: false,
-                            reason: "Exact human approval was not supplied. No Apply was sent.",
+                            reason: "Exact approval was not supplied, or the session no longer permits interactive approval. No Apply was sent.",
                         }),
                     };
                 }

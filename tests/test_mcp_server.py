@@ -51,6 +51,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
         self.png = encode_png(2, 1, bytes([0, 0, 255, 0, 0, 255, 0, 0]))
         self.server = create_server(
             lambda: self.actions, image_reader=lambda _actions, _visual: self.png,
+            allow_interactive_writes=True,
         )
 
     async def test_tool_catalog_hides_approval_and_exposes_images_and_recovery(self):
@@ -87,6 +88,27 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
                         )
         self.assertFalse(self.actions.applied)
         self.assertFalse(any(call["action"] == "apply" for call in self.actions.calls))
+
+    async def test_default_install_cannot_write_even_with_an_auto_answering_client(self):
+        from mcp import Client
+        from mcp.types import ElicitResult
+        from orcad_placement_agent.mcp_server import create_server
+
+        prompts = []
+
+        async def callback(_context, params):
+            prompts.append(params)
+            return ElicitResult(action="accept", content={"confirmation": f"APPLY {PROPOSAL}"})
+
+        server = create_server(lambda: self.actions, image_reader=lambda _a, _v: self.png)
+        async with Client(server, elicitation_callback=callback) as client:
+            result = await client.call_tool("pcb_apply_placement", {
+                "session": "board-fixture", "proposal": PROPOSAL,
+                "allow_interactive_writes": True,
+            })
+            self.assertTrue(result.is_error)
+        self.assertEqual(prompts, [])
+        self.assertEqual(self.actions.calls, [])
 
     async def test_decline_cancel_and_wrong_answers_never_apply(self):
         from mcp import Client
@@ -165,7 +187,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
         async def callback(_context, _params):
             return ElicitResult(action="accept", content={"confirmation": f"APPLY {PROPOSAL}"})
 
-        server = create_server(lambda: self.actions, image_reader=image)
+        server = create_server(lambda: self.actions, image_reader=image, allow_interactive_writes=True)
         async with Client(server, elicitation_callback=callback) as client:
             result = await client.call_tool(
                 "pcb_apply_placement", {"session": "board-fixture", "proposal": PROPOSAL}

@@ -84,6 +84,15 @@ the host's interactive elicitation UI. No default answer is supplied. Missing
 UI support, cancellation, unavailability, or a different answer means no Apply
 is dispatched. A planner recommendation or reviewer disposition is not consent.
 
+The app extension checks that session mode is `interactive` before and after
+the prompt. It refuses Autopilot, plan, unknown modes, and missing mode/UI
+support, and never changes modes itself. This matters because clients can
+automatically handle elicitation in autonomous modes.
+
+The [portable MCP package](installation.md) is read-only by default and requires
+separate operator opt-in for interactive writes. Standard elicitation does not
+attest human provenance; auto-answer hooks and unattended modes are unsupported.
+
 After approval, the controller consumes the proposal once and the native
 adapter rechecks the full scene. An accepted Windows message is not success:
 the explicit native receipt determines `applied`, `rejected`, `rolled_back`,

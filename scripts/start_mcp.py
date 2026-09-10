@@ -28,6 +28,7 @@ def local_data():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--environment-directory", type=Path)
+    parser.add_argument("--allow-interactive-writes", action="store_true")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     version = json.loads((root / "plugin.json").read_text(encoding="utf-8"))["version"]
@@ -57,8 +58,11 @@ def main():
         environment_values["OPA_KNOWLEDGE_DB"] = str(data / "OrCadPlacementAgent" / "knowledge.sqlite3")
     # Explicit standard handles preserve MCP pipes on Windows. os.execve does
     # not provide a reliable process/pipe handoff for this launcher there.
+    command = [str(python), "-I", "-X", "utf8", "-m", "orcad_placement_agent.mcp_server"]
+    if args.allow_interactive_writes:
+        command.append("--allow-interactive-writes")
     with subprocess.Popen(
-        [str(python), "-I", "-X", "utf8", "-m", "orcad_placement_agent.mcp_server"],
+        command,
         stdin=sys.stdin.buffer, stdout=sys.stdout.buffer, stderr=sys.stderr.buffer,
         env=environment_values,
     ) as child:

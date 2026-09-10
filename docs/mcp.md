@@ -32,16 +32,24 @@ gaps are explicit errors/notices, not fabricated expertise.
 
 ## Human approval across protocol versions
 
+Portable installs are **read-only by default**. Only the operator may add
+`--allow-interactive-writes`, and only when the client uses genuine interactive
+input with no automatic elicitation answers. The flag is not a model tool
+argument, and no installer or marketplace manifest enables it.
+
 Apply has only `session` and `proposal` as model-visible arguments. A hidden
-SDK dependency requests an exact form response from the human. It asks on both
+SDK dependency requests an exact form response. It asks on both
 legacy MCP connections and the newer multi-round-trip protocol; the SDK binds
 continuation state to the originating request and question.
 
-There is no default answer, model confirmation parameter, manual override,
+There is no default answer, model confirmation parameter, per-call override,
 or automatic fallback. The response must exactly match `APPLY <proposal-id>`.
 Decline/cancel, wrong answers, missing form elicitation, or an unavailable
 human do not dispatch Apply. The client must render genuine human input;
-annotations and automatic tool-call approval are not substitutes.
+protocol capability negotiation
+and an accepted response do not prove a human answered. Copilot Autopilot and
+Claude auto-answering elicitation hooks are specifically unsupported for writes.
+Annotations and automatic tool-call approval are not substitutes.
 
 The existing controller still rechecks the visually bound proposal and native
 scene and consumes approval once. A transport retry cannot approve a second
