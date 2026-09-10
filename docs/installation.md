@@ -39,7 +39,7 @@ can replace the explicit interpreter path. Existing developers may use the
 repository's `.venv\Scripts\python.exe`.
 
 The installer creates an owned, versioned environment at
-`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.3.0` and generates client
+`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.4.0` and generates client
 snippets inside its `client-configs` directory. It does not change PATH,
 Python 2.7, execution policy, Cadence settings, existing client configuration,
 or any board. Re-running is idempotent for the same installed version; it
@@ -50,16 +50,28 @@ PowerShell script execution was restricted on the development machine. These
 Python entry points and direct configurations avoid requiring PowerShell
 scripts; the installer does not bypass or change that policy.
 
-Optional local books can be indexed explicitly:
+**PCB expertise is bundled:** the default install includes 36 original rules
+and needs no books, index, PDF parser, embedding service or extra model.
+Search and full-rule lookup work immediately after MCP registration. Cadence,
+design-specific inputs and native human-approval requirements remain separate.
+
+Optional local books can be indexed explicitly (this installs PDF dependencies):
 
 ```powershell
 & 'C:\path\to\Python3\python.exe' -I -X utf8 scripts\install.py `
     --books 'C:\my-local-reference-books' --client all
 ```
 
-The portable reference database defaults to
-`%LOCALAPPDATA%\OrCadPlacementAgent\knowledge.sqlite3`. No books, extracted text,
-screenshots, or board files are distributed in the package.
+With `--books`, the optional index is written to
+`%LOCALAPPDATA%\OrCadPlacementAgent\knowledge.sqlite3`, and generated direct
+configs explicitly select it. Without that flag, setup installs only the
+integration dependencies and does not configure or create an index.
+No books, extracted passages, screenshots, or board files are distributed.
+For marketplace startup, set `OPA_KNOWLEDGE_DB` explicitly if you want this
+optional enrichment; it is not auto-discovered. Adding `--books` after a default
+installation writes separate snippets to `client-configs-with-books`, preserving
+the no-book `client-configs` files. Review and deliberately select the new entry
+in your client; existing client settings are never changed automatically.
 
 ## 2A. Direct MCP configuration
 
@@ -84,8 +96,8 @@ codex mcp add orcad-placement -- 'C:\installed-env\Scripts\python.exe' -I -X utf
 claude mcp add --transport stdio --scope local orcad-placement -- 'C:\installed-env\Scripts\python.exe' -I -X utf8 -m orcad_placement_agent.mcp_server
 ```
 
-Add `--knowledge-db <local-index>` to the server arguments when using these
-commands directly. The generated files already include that argument.
+No database argument is needed. Add `--knowledge-db <local-index>` only for
+optional PDF enrichment; generated files include it only when `--books` was used.
 Keep server registration explicit; the installer does not modify global client
 settings or delete an existing server with the same name.
 

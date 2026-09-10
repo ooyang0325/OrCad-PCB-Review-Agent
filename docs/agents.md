@@ -23,52 +23,47 @@ These are prompts for the selected Copilot model, not a new model service or
 trained PCB model. They inherit the client's model selection. No separate
 API key, embedding service, vector database, or model download is introduced.
 
-## Local reference setup
+## Built-in expertise: no book setup
 
-Install only the optional local PDF tools in the existing virtual environment:
+All four agents can call `pcb_reference_catalog`, `pcb_reference_search` and
+`pcb_reference_rule` immediately. Three original packs ship 36 rules covering
+signal/routing, power/thermal and placement/manufacturing. Search selects
+candidates; full-rule lookup supplies applicability, design inputs, checks,
+tradeoffs, failure modes, limits and development-time source provenance.
+Agents cite stable rule IDs and must not ask users for textbooks or an index
+before starting. A context packet is optional, not a setup prerequisite.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[knowledge]"
-.\.venv\Scripts\python.exe -m orcad_placement_agent knowledge index
-.\.venv\Scripts\python.exe -m orcad_placement_agent knowledge catalog --json
-```
+This is versioned, original engineering synthesis from selected local source
+sections, not model training, copied textbook content or exhaustive book
+coverage. The knowledge ships in wheels, source distributions and plugins.
+See the [rubric and knowledge contract](pcb-expertise.md). Design-specific
+schematics, constraints, applicable datasheets and actual images are still
+needed for concrete recommendations.
 
-The default library is `pcb_design_book`; the default index is
-`.runtime\knowledge.sqlite3`. Override `--books` or `--database` when needed.
-Both directories are ignored by Git. The base Cadence controller still has
-no third-party runtime dependency.
-
-The local indexer uses pypdf, fontTools, and SQLite FTS5. It does not perform OCR,
-decrypt protected PDFs, upload documents, train a model, or contact a model
-provider. Encrypted, image-only, malformed, oversized and partially extracted
-documents are reported explicitly. Font/parser warnings are recorded in
-document notices as well as surfaced by the reader.
-
-Incremental indexing uses ordinary file size/modification metadata. Changed
-or removed indexed sources invalidate retrieval until reindexing; an extractor
-revision change rebuilds the cache. Use `knowledge index --rebuild` if external
-tools preserved timestamps or the PDF-reader environment changed. This is a
-disposable search cache, not document version control. Use Git for project
-source history, and keep the supplied books out of commits.
+[Local PDF enrichment](reference-search.md) remains optional. Only explicit
+indexing requires `.[knowledge]`; the base controller and bundled knowledge
+have no third-party runtime dependencies. PDF gaps/staleness are surfaced
+without disabling the bundled rules. Raw sources and disposable indexes stay
+local-only; Git versions the original synthesis.
 
 ## Find and inspect evidence
 
 ```powershell
 .\.venv\Scripts\python.exe -m orcad_placement_agent knowledge search "decoupling return" --json
-.\.venv\Scripts\python.exe -m orcad_placement_agent knowledge page "40 PCB Design Tips Every Designer Should Know.pdf" --page 37 --json
+.\.venv\Scripts\python.exe -m orcad_placement_agent knowledge rule <card-id-from-search> --json
 ```
 
-Search results contain the exact source, physical PDF page, bounded excerpt,
-and excerpt offset. Multi-term searches prefer all terms, then label relaxed
-any-term matches. A CJK substring fallback is labeled separately. Search rank
-is not engineering authority. Read surrounding text before drawing conclusions.
-PDF page numbers are one-based file pages, not the printed page numbers.
+Bundled results contain `source_kind: bundled_synthesis`, stable `card_id`,
+release version, citation and a short principle. Read full rules before applying
+them. Bibliographic pages are not a claim to have read the book at runtime.
+Optional PDF matches are separate `supplement_hits`; only actual supplied
+excerpts support runtime physical PDF-page citations.
 
-## Prepare an agent packet
+## Optional agent packet
 
 For a full placement mission, start with **PCB placement orchestrator** and
 the [orchestration contract](placement-orchestration.md). Supply the approved
-design/inventory, constraints, exact session if available, and evidence packet.
+design/inventory, constraints, and exact session if available.
 The coordinator distinguishes blank, imported-unplaced, partial, and routed
 states. Current initial-placement/import/routing gaps are explicit execution
 blockers, not permission to improvise a backend.
@@ -80,7 +75,9 @@ blockers, not permission to improvise a backend.
 ```
 
 The command writes a new local `.runtime\advisory\context-*.json` and prints its
-path. It retrieves evidence candidates; it does not perform an LLM review.
+path. Version 2 packets embed complete selected rules, not just short excerpts.
+It retrieves evidence candidates; it does not perform an LLM review.
+No database is needed; `--database <index>` explicitly adds optional PDFs.
 Use `--json` for an ASCII-safe, machine-readable packet path and authority
 summary, including when the workspace path contains non-ASCII characters.
 Supported topics are placement, routing-readiness, decoupling, power-loops, return-paths,
@@ -93,17 +90,18 @@ potentially stale. Do not pass a `.brd` binary or a rejected receipt.
 
 In a Copilot client supporting repository custom agents, open this repository
 and select **PCB placement planner** from the agent picker (the CLI provides
-the `/agent` picker). Give it the exact generated packet path and your goal.
-Then select **PCB layout reviewer** and supply that same packet plus the
+the `/agent` picker). Give it your goal, design inputs and any optional packet.
+Then select **PCB layout reviewer** and supply the same evidence plus the
 planner's response. For an exact supported proposal, use **PCB placement
 executor** to inspect it and request interactive approval before Apply.
 Reload/reopen the client if it has not discovered newly
 added profiles. This repository does not install a separate Copilot CLI.
 
-If an app agent needs more page context than its packet contains, the operator
-runs `knowledge page` and supplies the bounded result. The portable workflows
-can instead use their configured MCP reference tools. The app profiles
-intentionally do not gain shell access just to retrieve extra text.
+Both app profiles and portable workflows retrieve full bundled rules through
+bounded tools without shell access. If optional original PDF context is
+specifically needed, MCP provides `pcb_reference_page`; app users may supply
+an explicit `knowledge page --database <index>` result. Missing books alone do
+not block bundled advice.
 
 The profiles use the documented [GitHub custom-agent frontmatter and tool
 aliases](https://docs.github.com/en/copilot/reference/custom-agents-configuration).
@@ -134,12 +132,14 @@ change. The existing controller still requires an exact pose proposal,
 explicit approval, fresh native state, and supported geometry/rule checks.
 M3/M4 native mutation acceptance remains approval-gated.
 
-## Initial library and advisory coverage
+## Synthesis source coverage
 
 The initial local catalog contains 40 PDFs, with 5,663 text-bearing pages from
 37 documents. Two encrypted PDFs and one image-only/non-extractable PDF are
 unavailable to text retrieval. Some other sources have partial page coverage
-or parser notices; consult the catalog rather than assuming every page was read.
+or parser notices. Three synthesis workers read selected relevant sections and
+authored the shipped cards; indexing 5,663 pages does not mean all were read.
+These local-library counts describe development evidence, not user prerequisites.
 
 An independent-context planner/reviewer exercise used a real evidence packet
 and the archived synthetic snapshot. Both roles identified missing electrical

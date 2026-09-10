@@ -23,6 +23,9 @@ must report the missing capability instead of using a shell/GUI workaround.
 
 | Tool | Effect |
 |---|---|
+| `pcb_reference_catalog` | List bundled expertise and stable rule IDs, without books or a board |
+| `pcb_reference_search` | Retrieve bounded bundled-rule candidates |
+| `pcb_reference_rule` | Read a complete rule with conditions, checks, limits and synthesis provenance |
 | `pcb_sessions` | List recorded staged sessions and declared backend scope; neither proves live readiness |
 | `pcb_inspect` | Read fresh native state around capture of only the bound Cadence window |
 | `pcb_inspection_status` | Report an unresolved read-only snapshot, or reconcile its exact request ID without replay |
@@ -30,10 +33,15 @@ must report the missing capability instead of using a shell/GUI workaround.
 | `pcb_apply_placement` | Obtain the human's exact confirmation through the host UI, then apply once in memory |
 | `pcb_execution_status` | Read or reconcile the result of an already prepared proposal without replaying it |
 
-Tools accept a managed session name such as `board-<id>`, never an arbitrary
+Board tools accept a managed session name such as `board-<id>`, never an arbitrary
 directory, executable, native command, or output path. The session must already
 be staged and attached by the operator's documented CLI workflow. Do not choose
 an unrelated session just because it appears first in the list.
+
+Bundled reference tools need no session, index, or local textbooks and do not
+open Cadence. They accept only a bounded query or stable card ID, not file paths.
+The app interface serves bundled synthesis; optional PDF enrichment remains
+available through the portable MCP interface or an explicit CLI context packet.
 
 The binding contains the exact PID, HWND, executable and process creation time.
 Recorded titles may retain a startup directory; the native full board path and

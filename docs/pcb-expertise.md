@@ -1,9 +1,48 @@
 # PCB placement reasoning rubric
 
-This is an original advisory rubric, not a replacement for the supplied books,
+This is an original advisory rubric, not a replacement for applicable
 device datasheets, manufacturing requirements, or engineering sign-off. It
 guides the planner and reviewer; it does not certify a design or authorize a
 native operation.
+
+## Shipped knowledge
+
+The canonical, original knowledge lives in
+`src\orcad_placement_agent\_knowledge` and is included in installed packages.
+No books, index or PDF dependencies are needed to use it.
+
+| Pack | Cards | Scope |
+|---|---|---|
+| `signal-routing` | 12 | Return paths, edge rates, topology, termination, differential pairs, crosstalk, clock/sensitive regions, fanout and routing readiness |
+| `power-thermal` | 12 | Decoupling, PDN and mounting inductance, converter loops, switch/feedback/sense separation, Kelvin connections and thermal paths |
+| `placement-manufacturing` | 12 | Inventory, mechanical anchors, floorplans, early critical passives, corridors, assembly/rework, polarity, depanelization, test and isolation inputs |
+
+Each rule includes applicability, required inputs, actionable checks, tradeoffs,
+failure modes and limits, plus bibliography and physical PDF-page provenance.
+Three independent synthesis workers inspected selected source sections and
+wrote original cards. This is not a reproduction, comprehensive digest of all
+40 local books, trained model, standards database, or PCB certification.
+Bibliographic uncertainty is retained in each source's `identity_note`.
+
+Use `pcb_reference_search` then `pcb_reference_rule`, or the CLI
+`knowledge search` and `knowledge rule`. Cite the stable card ID and release
+version; the source bibliography explains development-time grounding, not live
+book consultation. Rules have no invented PDF page. The complete card, not its
+search excerpt alone, is the unit of engineering guidance.
+
+Rules are conditional and subordinate to applicable device/project and safety
+requirements. Contradictions or missing board facts must be resolved explicitly.
+Native access and approval remain entirely independent of this knowledge.
+
+## Maintaining the packs
+
+Keep IDs stable; record guidance changes in Git, not bespoke content hashes.
+Review new cards for technical applicability, source identity, actual physical
+page support, original wording and missing conditions. Do not add copyrighted
+extracts, tables, diagrams, proprietary designs, or unqualified numeric rules.
+The loader validates schema, IDs, citations and bounds; tests exercise retrieval
+and no-book behavior, not electrical truth. A bibliography reference does not
+replace engineering review of a changed rule.
 
 ## Evidence and authority
 
@@ -12,6 +51,7 @@ native operation.
 | Explicit board snapshot fields | Observed geometry/state at that snapshot, not current live state |
 | Confirmed schematic, pin/net roles, project requirements | Design-specific intent within their stated scope |
 | Applicable device datasheet or manufacturer reference layout | Device-specific recommendation subject to its conditions |
+| Bundled original rule, including checks and limits | Conditional engineering guidance; source provenance is historical, not a live PDF read |
 | Relevant book/application-note page | A principle or heuristic, not an automatically applicable numerical rule |
 | Agent inference | A hypothesis to explain and verify, never an established board fact |
 
@@ -57,11 +97,12 @@ textbook example is not an approved high-voltage isolation rule.
 - A supplied real board remains outside the fixture-only native write model.
   Advisory reasoning does not expand the editor adapter's supported scope.
 
-## Local reference starting points
+## Optional original-source navigation
 
-These are navigation seeds identified from the user's local library. Retrieve
-the actual relevant page context for each new task; do not copy these citations
-onto a claim without checking that the text supports it.
+These are development-library navigation seeds, not runtime prerequisites.
+Built-in rules are usable without these files. If using optional original
+excerpts for a new claim, retrieve the actual page context; do not copy historical
+citations onto a claim without checking the text.
 
 | Local reference | Physical PDF page | Relevant starting point |
 |---|---|---|

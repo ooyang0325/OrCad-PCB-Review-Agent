@@ -75,24 +75,30 @@ explicitly rejected by the placement adapter rather than treated as safe.
 `apply` and `save` remain experimental until M3/M4 acceptance is approved and
 completed.
 
-## Local reference search
+## Built-in PCB expertise
 
-The optional [reference-search tool](docs/reference-search.md) indexes the
-supplied PCB books locally and retrieves bounded excerpts with source/PDF-page
-citations. Install it with `pip install -e ".[knowledge]"` using the repository
-virtual environment. It does not upload documents, operate Cadence, or call a
-model provider.
+The package ships **36 original guidance cards** covering signal/routing,
+power/thermal, and placement/manufacturing. Agents retrieve complete principles,
+required inputs, actionable checks, tradeoffs and limits immediately: **no books,
+PDF index, model training or extra knowledge setup required**. Bibliography
+records development-time synthesis from selected source sections, not runtime
+book access. Raw books and copied extracts are not distributed.
+
+[Reference search and rule lookup](docs/reference-search.md) work through MCP,
+the app tools and CLI. Local PDFs remain optional enrichment; only their
+extraction requires `.[knowledge]`. Retrieval makes no network/model calls.
 
 ## PCB expert agents
 
 The [agent workflow](docs/agents.md) provides **PCB placement orchestrator**
 above **PCB placement planner**, **PCB layout reviewer**, and **PCB placement
 executor**. They use
-local reference evidence, distinguish board facts from assumptions, and require
-source/PDF-page citations. All can inspect the bound Cadence image through
+bundled expertise, distinguish board facts from assumptions, and cite stable
+rule IDs (or optional PDF excerpts actually read). All can inspect the bound Cadence image through
 bounded tools; none has unrestricted shell or file-edit access.
 
-Prepare their input without starting Cadence or calling a model:
+Start with the installed reference tools and your design inputs; a packet is
+optional. To create one without starting Cadence or calling a model:
 
 ```powershell
 .\.venv\Scripts\python.exe -m orcad_placement_agent agent-context `
@@ -100,7 +106,7 @@ Prepare their input without starting Cadence or calling a model:
     --topic decoupling --topic return-paths
 ```
 
-Give the printed packet path to the planner, then the same packet and its
+If using a packet, give its printed path to the planner, then the same packet and its
 response to the reviewer. The executor can submit an exact visually grounded
 proposal to the [interactive approval workflow](docs/agent-execution.md).
 Approval is collected from the human by the host UI, never supplied by the

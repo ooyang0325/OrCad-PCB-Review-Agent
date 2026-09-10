@@ -51,8 +51,12 @@ dependency. Do not replace Python 2.7 or modify global Cadence settings.
   never unrelated desktop contents. Missing images or timeouts must not be
   represented as successful inspection or as a reason to replay a placement.
 - Keep extracted book text, SQLite indexes, and advisory packets under ignored
-  `.runtime` storage. Use physical PDF-page citations and disclose extraction
-  gaps. Never invent net roles, universal numerical rules, or source support.
+  `.runtime` storage. Bundled original expertise in `_knowledge` is the default;
+  never require user textbooks, an index, or PDF dependencies for advice.
+  Cite stable rule IDs and retain applicability/limits. Source-page provenance
+  records synthesis-time reading, not runtime access. Use physical PDF-page
+  citations only for actual optional excerpts and disclose extraction gaps.
+  Never invent net roles, universal numerical rules, or source support.
 - Document setup, usage, and relevant external tool requirements when adding
   runnable functionality.
 
@@ -68,7 +72,7 @@ dependency. Do not replace Python 2.7 or modify global Cadence settings.
 - Python tests do not establish native SKILL, licensing, dispatch, DRC, or
   persistence behavior. Those require the dedicated local synthetic fixture.
 - Local PDF support is optional: install `.[knowledge]` in `.venv` only when
-  using the reference tools. The indexer has no model/network calls; excerpts
+  extracting PDFs, not for bundled reference tools. The indexer has no model/network calls; excerpts
   read into Copilot are still processed by the configured Copilot service.
 - Portable MCP support uses `.[integrations]`. Validate manifests and installed
   assets without changing client settings or Windows execution policy. Package

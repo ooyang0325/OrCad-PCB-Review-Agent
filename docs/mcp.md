@@ -24,11 +24,20 @@ The server exposes `pcb_sessions`, `pcb_inspect`, `pcb_prepare_placement`,
 Inspection/preparation return native PNG image blocks and bounded structured
 metadata. Use the saved receipt paths for full native scene data.
 
-`pcb_reference_catalog`, `pcb_reference_search`, and `pcb_reference_page` read
-an operator-configured local index. Set `--knowledge-db <path>` or
-`OPA_KNOWLEDGE_DB`; no database path is accepted from a model tool argument.
-Install `.[knowledge]` when extracting PDFs. Missing indexes and extraction
-gaps are explicit errors/notices, not fabricated expertise.
+`pcb_reference_catalog`, `pcb_reference_search`, and `pcb_reference_rule` expose
+36 bundled original PCB rules immediately, without books, a database, or PDF
+dependencies. Search returns stable `card_id` citations; rule lookup returns
+applicability, required inputs, checks, tradeoffs, failure modes, limits and
+development-time bibliography. It does not claim to read original books at runtime.
+
+Optionally set `--knowledge-db <path>` or `OPA_KNOWLEDGE_DB` to enrich results
+with local PDF evidence; no database path is accepted from a model argument.
+Bundled matches are in `hits`; optional PDF matches are in `supplement_hits`,
+with distinct `source_kind` values. Missing/stale/corrupt supplements produce
+warnings without disabling real bundled expertise. `pcb_reference_page` is
+strictly for original PDF excerpts and errors when no local index is configured.
+Install `.[knowledge]` only when extracting PDFs; catalog notices expose gaps.
+The server has ten tools; all reference operations are read-only.
 
 ## Human approval across protocol versions
 
@@ -58,7 +67,8 @@ bounded recovery tools rather than replaying Apply.
 
 ## Installed packages
 
-Wheels include the original SKILL adapter, probe, and synthetic fixture recipe.
+Wheels include the original SKILL adapter, probe, synthetic fixture recipe,
+and the three original JSON expertise packs.
 They do not include vendor libraries, books, PCB binaries, screenshots, or
 indexes. Native staging resolves these trusted package assets rather than
 looking in the client's arbitrary working directory.
