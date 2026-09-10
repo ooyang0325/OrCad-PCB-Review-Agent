@@ -15,8 +15,8 @@ performed by the installer.
 - Marketplace bootstrapping uses the Windows `py -3` launcher. If `py` is not
   installed, the generated direct MCP configurations use an absolute Python
   path and do not need it.
-- Each user needs GitHub access to this currently private repository and working
-  Git credentials. Never put tokens in plugin manifests or configuration samples.
+- If the repository is private, each user needs GitHub access and working Git
+  credentials. Never put tokens in plugin manifests or configuration samples.
 
 The plugin starts **read-only by default**: inspection, visual proposals,
 reference search and recovery are available. Native writes remain limited to
@@ -224,7 +224,8 @@ Remote Git marketplace installs receive tracked files only.
 
 The marketplace manifests make this repository a catalog; they do **not**
 submit it to OpenAI's universal public directory, an official Claude directory,
-or another public listing. The repository remains private. No new open-source
+or another public listing. Packaging does not change repository visibility.
+No new open-source
 license is assigned here; choose licensing, privacy/terms and publication
 requirements deliberately before broader distribution. OpenAI's public MCP
 submission path generally expects a remote HTTPS integration; this local

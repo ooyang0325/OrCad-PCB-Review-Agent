@@ -12,7 +12,7 @@ These are development gates, not dates or GitHub milestones.
 | M5 | Local PCB reference grounding | Local extraction/search with page citations, freshness and coverage notices | Complete |
 | M6 | Advisory expert agents | Read-only planner/reviewer profiles and bounded, citation-bearing context packets | Complete for Copilot-profile advisory workflow |
 | M7 | Visual agent execution | All profiles inspect actual Cadence PNGs; bounded tool execution obtains exact human approval and reports native/post-image outcomes | Visual/tools complete; first live move awaiting exact approval |
-| M8 | Portable client distribution | Standard MCP, packaged native assets, safe setup/config generation, and Codex/Claude/Copilot plugin-marketplace manifests | Complete packaging; client prerequisites and private-repo access required |
+| M8 | Portable client distribution | Standard MCP, packaged native assets, safe setup/config generation, and Codex/Claude/Copilot plugin-marketplace manifests | Complete packaging; client prerequisites and repository access required |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.
