@@ -5,14 +5,17 @@ independent reviewer, and executor. The portable equivalent is the explicitly
 invoked `pcb-placement-orchestrate` skill.
 
 It manages an end-to-end placement **workflow**, including the prerequisites
-between an empty board and a fully placed, routing-reviewed layout. It is not
-a new native initial-placement API, autorouter, or approval authority.
+between logical design intake and a fully placed, routing-reviewed layout.
+The [executable mission engine](placement-missions.md) now supplies complete
+target planning, fresh-readback progress and one-at-a-time native proposal
+preparation. The coordinator is not an autorouter or approval authority.
 
 Select **PCB placement orchestrator** in a client supporting repository agents,
 or invoke `pcb-placement-orchestrate` from the installed plugin. Supply the
 mission intake below; do not supply a generic "place everything" request without
-a verified design inventory. Version 0.4.0 includes built-in expertise and full
-rule lookup: no textbooks or index are required. Upgrade/restart existing
+a verified design inventory. Bundled expertise and full rule lookup need no
+textbooks or index. Version 0.5.0 adds experimental managed-board missions.
+Upgrade/restart existing
 installs deliberately to receive the new tools.
 
 Optionally prepare routing-focused context without opening or changing a board:
@@ -38,19 +41,19 @@ operations. This is software scope, not proof of a live license or open board.
 | Inspect the supported board and return PNG/native evidence | Supported after staging/attachment |
 | Move/rotate an already-placed original-fixture symbol | Implemented, subject to exact approval and native gates |
 | Import a schematic/netlist or resolve arbitrary libraries | Not implemented |
-| Initially place an unplaced logical component | Not implemented |
+| Initially place an unplaced logical component | Implemented for explicit managed-board-v1 with embedded simple SMT footprints; native acceptance pending |
+| Plan complete target sets and reconcile fresh placement coverage | Implemented, with pin-based routing proxies and explicit constraints |
+| Save a new revision through an agent | Separate exact human SAVE approval; no implicit reopen |
 | Write arbitrary production boards | Not supported |
 | Route traces or prove routing feasibility | Not implemented |
 
-Consequently, a zero-placement native mission currently stops at the
-initial-placement capability gate. The coordinator may still organize an
-offline floorplan, reference review and explicit operator/backend prerequisites.
-It must not claim that the current move tool can place an unplaced symbol, or
-delegate raw commands to work around the gap.
-
-If a future adapter genuinely adds these capabilities, update its declaration
-and native acceptance before allowing the coordinator to advance those steps.
-An older server without a declaration is unknown, not implicitly capable.
+Zero physically placed components is supported by the new implementation when
+the staged board already contains the logical inventory and embedded geometry.
+Check the exact session model: the default fixture model does not gain initial
+placement. Missing libraries, empty logical designs and unsupported topology
+remain blockers. Do not bypass them with raw commands. An older server without
+a declaration is unknown, not implicitly capable. Native acceptance still
+requires a dedicated fixture and genuine interactive approval.
 
 ## Mission intake
 

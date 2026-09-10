@@ -48,9 +48,16 @@ dedicated visible editor holding a disposable board copy. Every change will
 require approval of its exact target pose and current board state. Apply and
 save will be separate operations.
 
-AI optimization, arbitrary production boards, initial placement, routing,
-Presto, headless execution, remote access, and arbitrary SKILL evaluation are
-outside the initial release.
+Arbitrary production boards, raw schematic/netlist import, unloaded-footprint
+acquisition, routing, Presto, headless execution, remote access, and arbitrary
+SKILL evaluation remain outside the supported native boundary.
+
+The experimental [placement mission workflow](docs/placement-missions.md)
+adds concrete all-component planning, native initial-placement handling and
+separate revision-save approval for explicitly staged `managed-board-v1`
+designs. It starts with a known imported logical inventory and embedded simple
+SMT footprints, including zero physically placed components. Native acceptance
+of this new model remains pending; Python/fake-editor tests are not that proof.
 
 The supplied `doc` manuals and `pcb_design_book` references remain local-only.
 Do not commit them, vendor libraries, or native working board files.
@@ -110,16 +117,19 @@ If using a packet, give its printed path to the planner, then the same packet an
 response to the reviewer. The executor can submit an exact visually grounded
 proposal to the [interactive approval workflow](docs/agent-execution.md).
 Approval is collected from the human by the host UI, never supplied by the
-model. No implicit Save is performed, and fixture-only native limits remain.
+model. No implicit Save is performed; the selected native model's limits remain.
 
 For a full mission, select **PCB placement orchestrator** or invoke the portable
 `pcb-placement-orchestrate` skill. It manages intake, functional floorplanning,
 dependency-ordered batches, independent review, execution handoffs and
 [routing-aware completion gates](docs/placement-orchestration.md).
-**It does not add native import, initial placement of unplaced components, or
-routing.** Those current backend gaps remain explicit blockers to an automatic
-zero-components-to-fully-placed run; the coordinator never hides them or calls
-an empty inventory complete.
+It now uses an executable mission engine, not just role handoffs:
+`pcb_plan_placement`, `pcb_prepare_next_placement`, and `pcb_placement_status`.
+The default fixture model stays unchanged. The explicit managed model implements
+initial placement under its restricted geometry/library conditions.
+**Raw empty-design import and missing footprint loading remain intake blockers;
+native end-to-end acceptance is not yet complete.** No empty inventory is
+reported complete and no routing or electrical certification is implied.
 
 ## Portable clients
 

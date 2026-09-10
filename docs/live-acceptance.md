@@ -1,5 +1,32 @@
 # Live acceptance status
 
+## Managed-board mission implementation
+
+The new experimental managed-board-v1 model implements initial placement and
+movement for already-logical components with embedded simple SMT footprints.
+The mission engine computes complete target sets, preserves existing placed
+parts, reserves routing/access regions and reconciles fresh native readback.
+MCP/app tools expose the loop and separately approved new-revision saves.
+Pure and fake-editor tests exercise these interfaces, but are not native proof.
+
+The historical dedicated fixture window is no longer available. An unrelated
+user design was observed in another editor and was not selected or modified.
+The operator was unavailable when asked about dedicated-fixture acceptance.
+No native Apply or Save was dispatched, no current user design was replaced,
+and no approval was inferred from Autopilot or a request to continue.
+
+Native acceptance is still required for script loading, property/stackup/pad
+enumeration, first-symbol creation, pose changes, DRC rollback, Undo and
+save/reopen. Until that occurs this is an experimental implementation, not a
+demonstrated end-to-end Cadence placement result. See
+[the supported boundary and workflow](placement-missions.md).
+
+API research used locally installed Cadence engineering notes under
+`share\pcb\examples\skill\DOC\FUNCS` and `DOC\QIR\CHANGE`. Their README warns
+that entries may be inaccurate or unsupported and their version metadata is
+older than 25.1. Documented signatures informed the implementation, but do not
+establish licensed native behavior. Those vendor files are not redistributed.
+
 ## Current status
 
 The previous startup blocker cleared after the user closed the existing

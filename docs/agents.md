@@ -65,8 +65,11 @@ For a full placement mission, start with **PCB placement orchestrator** and
 the [orchestration contract](placement-orchestration.md). Supply the approved
 design/inventory, constraints, and exact session if available.
 The coordinator distinguishes blank, imported-unplaced, partial, and routed
-states. Current initial-placement/import/routing gaps are explicit execution
-blockers, not permission to improvise a backend.
+states. Use the [executable mission workflow](placement-missions.md) for
+complete target planning and fresh-readback progression. Initial placement
+requires the explicit managed-board model and supported embedded footprints.
+Import, missing-library, geometry and routing gaps are blockers, not permission
+to improvise a backend.
 
 ```powershell
 .\.venv\Scripts\python.exe -m orcad_placement_agent agent-context `
