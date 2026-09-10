@@ -4,7 +4,7 @@ These are development gates, not dates or GitHub milestones.
 
 | Milestone | Deliverable | Completion condition | Current state |
 |---|---|---|---|
-| M0 | Isolated environment and synthetic fixture | Python setup plus live, read-only licensed SKILL capability probe | Native read-only probe passed; fixture in progress |
+| M0 | Isolated environment and synthetic fixture | Python setup plus live, read-only licensed SKILL capability probe | Complete |
 | M1 | Reliable read-only live bridge | Externally triggered, correlated board snapshots from the selected editor | Controller ready; native integration pending |
 | M2 | Deterministic proposals and approval | Exact proposals with explicit approval and stale-scene rejection | Controller ready; native acceptance pending |
 | M3 | Transactional placement | Approved movement, DRC rollback, accurate readback, and native Undo | Pending |
@@ -15,8 +15,10 @@ Read-only live access must be established before board-editing work begins.
 
 Python isolation, package setup, read-only diagnostics, trusted probe staging,
 and the original fixture specification are implemented. After the user closed
-the existing OrCAD session, a fresh native probe completed on an empty board:
-OrCAD X Professional Plus, 25.1-2025 S050. The synthetic fixture is in progress.
+the existing OrCAD session, native probes completed on the empty board and
+the saved synthetic working copy in OrCAD X Professional Plus, 25.1-2025 S050.
+The original three-component fixture has six connected pins, R3 fixed,
+explicit placement bounds, enabled placement rules, and no baseline DRCs.
 The Python protocol, request lifecycle, bounded Windows transport, and exact
 proposal approval are implemented; this does not establish native apply,
 DRC rollback, or persistence. See [live acceptance](live-acceptance.md).

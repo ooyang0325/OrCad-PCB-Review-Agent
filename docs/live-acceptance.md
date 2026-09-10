@@ -5,8 +5,11 @@
 The previous startup blocker cleared after the user closed the existing
 OrCAD session. A fresh dedicated read-only editor completed the SKILL probe
 on an empty board, reporting OrCAD X Professional Plus, 25.1-2025 S050.
-Synthetic fixture construction and native integration are in progress.
-M0 is not complete until the probe also succeeds on that fixture.
+The original synthetic fixture was then constructed, saved to a protected
+source, copied, reopened, and independently read by the probe. M0 is complete.
+The working copy has three placed components, six connected pins, R3 fixed,
+millimeter units with 10,000 DBU/mm, and zero baseline DRCs. All three required
+placement-rule modes are enabled. Native bridge integration is in progress.
 
 The Python request/receipt protocol, bounded Windows transport, exact
 proposal approval and uncertain-outcome handling are implemented. Native
@@ -84,6 +87,7 @@ Load the printed trusted bootstrap command in that dedicated editor and run
 licensed product separately. A complete report must end with
 `probe_complete t` and identify the expected fixture and components.
 
-Only then complete M0 and the native M1 integration. Python-only results or an
-installed executable do not satisfy the gate. M3-M4 remain pending, and no
-end-to-end placement or persistence capability is claimed yet.
+The current M0 fixture has completed this procedure. Repeat it when rebuilding
+the fixture. Python-only results or an installed executable do not satisfy the
+gate. M3-M4 remain pending, and no end-to-end placement or persistence
+capability is claimed yet.
