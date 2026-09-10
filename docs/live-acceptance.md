@@ -9,11 +9,57 @@ The original synthetic fixture was then constructed, saved to a protected
 source, copied, reopened, and independently read by the probe. M0 is complete.
 The working copy has three placed components, six connected pins, R3 fixed,
 millimeter units with 10,000 DBU/mm, and zero baseline DRCs. All three required
-placement-rule modes are enabled. Native bridge integration is in progress.
+placement-rule modes are enabled. Native bridge integration now satisfies M1.
 
 The Python request/receipt protocol, bounded Windows transport, exact
-proposal approval and uncertain-outcome handling are implemented. Native
-placement, rollback, and save/reopen acceptance remain outstanding.
+proposal approval and uncertain-outcome handling are implemented. The native
+read-only acceptance run covers 19 cases and 18 actual snapshots; 56 pure native
+checks cover parsing, exact coordinates/angles, lossless numeric scene identity,
+and required geometry fill. The complete scene is 7,977 characters within the
+8,192-character bound. Original source and saved working content are unchanged.
+Native placement, rollback, Undo, and save/reopen acceptance remain outstanding.
+
+The supplied `design\howto_manufacturing.brd` was opened only through a staged
+read-only copy. It contains 46 components. The fixture-scoped placement adapter
+explicitly rejected its unsupported topology; this is not support for editing
+arbitrary boards. Both the supplied original and copy were left unchanged.
+
+## Pending exact approval
+
+The operator was asked to authorize the bounded synthetic-fixture acceptance
+batch below, but was unavailable. No approval was inferred, no Apply or Save
+request was executed, and no native mutation acceptance result is claimed.
+
+| Target | Absolute pose in millimeters / degrees | Purpose |
+|---|---|---|
+| R1 | (12, 12) / 90 | Valid move, followed by native Undo to (10, 10) / 0 |
+| R3 | (31, 10) / 0 | Fixed-target rejection |
+| R1 | (0, 0) / 0 | Boundary rejection or rollback |
+| R1 | (20, 10) / 0 | Overlap rollback |
+| R1 | (27, 21) / 0 | Keepout rollback |
+| R2 | (20, 12) / 0 | Invalidate an older R1 proposal, then Undo R2 to (20, 10) / 0 |
+| R1 | (12, 12) / 90 | Injected post-transform validation failure and rollback, then normal Apply |
+
+All parts stay top-side and rotate about their component origin. Use the
+synthetic working copy only, never the supplied board. Saving a new revision
+requires separate explicit approval after successful Apply. Regenerate
+proposals from the currently bound session; previous editor bindings and
+snapshot IDs are invalid after a restart or restaging.
+
+## Read-only bridge workflow
+
+After constructing the fixture, stage its protected source:
+
+```powershell
+.\.venv\Scripts\python.exe -m orcad_placement_agent stage '<fixture-directory>\source.brd'
+```
+
+Open only the printed working copy in the dedicated classic editor, load the
+printed bootstrap command, list `editors`, then `attach` using its exact HWND
+and session path. `snapshot --session <path>` reads fresh state.
+`propose --session <path> --refdes R1 --x 12 --y 12 --angle 90` prepares a
+reviewable proposal without applying it. The CLI requires exact confirmation
+before Apply or Save.
 
 ## Historical startup blocker
 

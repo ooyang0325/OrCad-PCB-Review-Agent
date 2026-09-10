@@ -51,7 +51,9 @@ reports invalid configuration or an inaccessible path.
 
 Use a dedicated visible classic PCB Editor session. Do not alter global
 `allegro.ilinit`, vendor installation files, or shared Cadence settings.
-No board mutation commands are currently available.
+Native Apply and Save handlers are present, but their live acceptance remains
+approval-gated. Do not treat implementation or read-only snapshots as proof
+that transaction rollback, Undo, or revision persistence has been established.
 
 ## Stage and run the M0 read-only probe
 
@@ -80,6 +82,6 @@ the product display name do not prove entitlement to every operation.
 Do not proceed to M1 until a suitable licensed session and the local fixture
 are available and the probe completes on that fixture.
 
-The current native-startup blocker and resume procedure are recorded in
-[live acceptance](live-acceptance.md). Do not mistake the staged probe files
-for a successful live run.
+The resolved startup history, current milestone evidence, and pending approval
+are recorded in [live acceptance](live-acceptance.md). Do not mistake the staged
+probe files alone for a successful live run.

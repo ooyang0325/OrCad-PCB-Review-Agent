@@ -83,6 +83,12 @@ The scene must cover all inputs relevant to the supported fixture, not merely
 the selected component. A client-side digest is not a replacement for native
 precondition comparison immediately before editing.
 
+Native floating-point scene values use explicit round-trip precision, including
+inside shared-list dictionary keys; ambient SKILL print precision must not
+merge different rule values. Every modeled rectangle also checks its expected
+filled/unfilled state. Unsupported fill or geometry is rejected rather than
+omitted from the approval preconditions.
+
 ## Approval and uncertain outcomes
 
 The controller stores the complete reviewed snapshot and target pose in a

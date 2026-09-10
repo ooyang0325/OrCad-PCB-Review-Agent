@@ -3,10 +3,11 @@
 A local, human-approved placement-access prototype for classic OrCAD X PCB
 Editor / Allegro X PCB Editor 25.1 on Windows.
 
-Development is gated by the [milestones](docs/milestones.md). Environment
-discovery, read-only probe staging, and the Python controller are implemented.
-The native placement adapter and end-to-end placement remain in development.
-`doctor` alone does not establish a licensed connection or modify a board.
+Development is gated by the [milestones](docs/milestones.md). The synthetic
+fixture and native read-only bridge are working in PCB Editor 25.1 S050.
+Exact proposal approval and guarded native apply/save handlers are implemented,
+but live mutation, rollback, Undo, and saved-revision acceptance still require
+explicit approval. `doctor` alone does not establish a licensed connection.
 
 ## Development setup
 
@@ -23,7 +24,7 @@ legacy Python installations. See [setup](docs/setup.md).
 
 ## Intended access boundary
 
-The controller will send bounded requests to a small SKILL adapter in a
+The controller sends bounded requests to a small SKILL adapter in a
 dedicated visible editor holding a disposable board copy. Every change will
 require approval of its exact target pose and current board state. Apply and
 save will be separate operations.
@@ -47,6 +48,10 @@ changes. The source-board fingerprint and proposal digest are safety checks:
 they detect source changes and bind approval to exact content. They are not a
 version-control system or a substitute for Git.
 
-The controller's `stage`, `attach`, `snapshot`, `propose`, `apply`, `save`, and
-`reconcile` commands are being integrated with the native adapter. Do not treat
-these commands as live-ready until their milestone gates are complete.
+`stage`, `attach`, `snapshot`, and `reconcile` implement the read-only bridge;
+`propose` prepares the exact reviewed pose without changing the board.
+The initial native model accepts only the original self-contained synthetic
+fixture. A supplied real board can be read using the separate probe, but is
+explicitly rejected by the placement adapter rather than treated as safe.
+`apply` and `save` remain experimental until M3/M4 acceptance is approved and
+completed.
