@@ -11,6 +11,8 @@ from typing import Iterable
 
 
 MAX_BYTES = 1024 * 1024
+# Persisted proposals/results embed receipts and JSON-escape native scene text.
+MAX_METADATA_BYTES = 8 * MAX_BYTES
 MAX_ROWS = 4096
 MAX_FIELD = 8192
 ID_PATTERN = re.compile(r"[0-9a-f]{32}")

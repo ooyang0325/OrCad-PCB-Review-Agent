@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import zlib
 
 from orcad_placement_agent.protocol import Receipt
-from orcad_placement_agent.session import write_json
+from orcad_placement_agent.session import SessionError, write_json
 from orcad_placement_agent.transport import EditorWindow
 from orcad_placement_agent.visuals import (
     VisualError, WindowImage, bounded_capture, capture_observation,
@@ -122,9 +122,10 @@ class VisualTests(unittest.TestCase):
     def test_metadata_write_failure_removes_only_its_new_image(self):
         original = self.root / "unrelated.png"
         original.write_bytes(b"preserve")
-        with patch("orcad_placement_agent.visuals.write_json", side_effect=OSError("Disk full")):
-            with self.assertRaises(OSError):
-                self.observe()
+        for error in (OSError("Disk full"), SessionError("Metadata too large")):
+            with patch("orcad_placement_agent.visuals.write_json", side_effect=error):
+                with self.assertRaises(type(error)):
+                    self.observe()
         self.assertEqual(original.read_bytes(), b"preserve")
         self.assertEqual(list(self.root.glob("visual-*")), [])
 

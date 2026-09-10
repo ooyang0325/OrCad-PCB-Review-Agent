@@ -553,7 +553,7 @@ procedure(opaCanonical(rows)
     )
 )
 
-procedure(opaReadFrame()
+procedure(opaFixtureReadFrame()
     let((design units common components records shapes placedCount rows component
          data symbol drcs scene frame)
         opaBoardGuard()
@@ -631,7 +631,7 @@ procedure(opaReadFrame()
     )
 )
 
-procedure(opaWritesAllowed(frame)
+procedure(opaFixtureWritesAllowed(frame)
     let((r3)
         opaRequire(length(frame->components) == 3 "Writes require all three fixture components.")
         foreach(data frame->components
@@ -657,7 +657,7 @@ procedure(opaOverlap(first second)
     cadar(first) < cadadr(second) && cadadr(first) > cadar(second)
 )
 
-procedure(opaPlacementPolicy(frame)
+procedure(opaFixturePlacementPolicy(frame)
     let((bounds others)
         foreach(data frame->components
             bounds = nth(6 data)
@@ -676,7 +676,7 @@ procedure(opaPlacementPolicy(frame)
     )
 )
 
-procedure(opaOnlyTargetChanged(before after refdes target angle)
+procedure(opaFixtureOnlyTargetChanged(before after refdes target angle)
     let((old current)
         opaRequire(equal(before->common after->common)
             "Non-component scene changed during the transaction.")
@@ -698,7 +698,7 @@ procedure(opaOnlyTargetChanged(before after refdes target angle)
     )
 )
 
-procedure(opaApplyTransaction(context)
+procedure(opaFixtureApplyTransaction(context)
     let((params identifier expected before after restored target angle refdes symbol
          old mark committed rollbackOK outcome result message)
         identifier = nth(1 context)
@@ -745,6 +745,7 @@ procedure(opaApplyTransaction(context)
                 opaPlacementPolicy(after)
                 t
             )
+
             t
         )
         message = opaError
@@ -777,4 +778,32 @@ procedure(opaApplyTransaction(context)
             )
         )
     )
+)
+
+procedure(opaManagedMode()
+    boundp('opaBoardModel) && opaBoardModel == "managed-board-v1"
+)
+
+procedure(opaReadFrame()
+    if(opaManagedMode() then opaManagedReadFrame() else opaFixtureReadFrame())
+)
+
+procedure(opaWritesAllowed(frame)
+    if(opaManagedMode() then opaManagedWritesAllowed(frame)
+        else opaFixtureWritesAllowed(frame))
+)
+
+procedure(opaPlacementPolicy(frame)
+    if(opaManagedMode() then opaManagedPlacementPolicy(frame)
+        else opaFixturePlacementPolicy(frame))
+)
+
+procedure(opaOnlyTargetChanged(before after refdes target angle)
+    if(opaManagedMode() then opaManagedOnlyTargetChanged(before after refdes target angle)
+        else opaFixtureOnlyTargetChanged(before after refdes target angle))
+)
+
+procedure(opaApplyTransaction(context)
+    if(opaManagedMode() then opaManagedApplyTransaction(context)
+        else opaFixtureApplyTransaction(context))
 )

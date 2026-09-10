@@ -154,7 +154,7 @@ procedure(opaCommand(operation arguments)
                     (operation == "snapshot"
                         frame = opaInspect(identifier)
                         opaCache(identifier frame)
-                        outcome = list("snapshot" "Fresh read-only native fixture snapshot."
+                        outcome = list("snapshot" "Fresh read-only native board snapshot."
                             append(frame->records list(list("snapshot" identifier)))))
                     (operation == "apply"
                         opaFrozen = list(opaNonce identifier operation copy(params))

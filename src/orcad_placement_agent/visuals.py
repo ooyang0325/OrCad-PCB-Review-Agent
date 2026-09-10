@@ -16,7 +16,7 @@ import uuid
 import zlib
 
 from .protocol import Receipt, Request
-from .session import Session, write_json, write_new
+from .session import Session, SessionError, write_json, write_new
 from .transport import EditorWindow, TransportError, WindowsAPI
 
 
@@ -280,7 +280,7 @@ def capture_observation(
     write_new(image_path, image.png)
     try:
         write_json(metadata_path, observation)
-    except OSError:
+    except (OSError, SessionError):
         image_path.unlink()
         raise
     return observation

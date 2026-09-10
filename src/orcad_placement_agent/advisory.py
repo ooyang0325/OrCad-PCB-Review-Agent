@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 
 from . import expertise, knowledge, references
-from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
+from .protocol import MAX_METADATA_BYTES, ProtocolError, Receipt, identifier
 from .proposals import check_snapshot
 from .session import write_json
 from .capabilities import backend_capabilities
@@ -26,7 +26,7 @@ TOPIC_QUERIES = {
 
 
 def _snapshot_context(path: Path) -> dict[str, object]:
-    if path.stat().st_size > MAX_BYTES:
+    if path.stat().st_size > MAX_METADATA_BYTES:
         raise ProtocolError("Snapshot artifact exceeds the size limit.")
     data = json.loads(path.read_text(encoding="utf-8"))
     receipt = Receipt.from_dict(data)
@@ -51,7 +51,7 @@ def _snapshot_context(path: Path) -> dict[str, object]:
 
 def _visual_context(path: Path) -> tuple[dict[str, object], Path]:
     path = path.expanduser().resolve(strict=True)
-    if path.stat().st_size > MAX_BYTES:
+    if path.stat().st_size > MAX_METADATA_BYTES:
         raise ProtocolError("Visual metadata exceeds the size limit.")
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("kind") != "pcb-visual-observation":

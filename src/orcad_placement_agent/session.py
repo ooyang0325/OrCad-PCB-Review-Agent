@@ -12,7 +12,7 @@ from typing import Callable
 import uuid
 
 from .protocol import (
-    MAX_BYTES, ProtocolError, Receipt, Request, identifier,
+    MAX_BYTES, MAX_METADATA_BYTES, ProtocolError, Receipt, Request, identifier,
 )
 from .transport import (
     CommandTransport, EditorWindow, IndeterminateDelivery, TransportError,
@@ -43,9 +43,10 @@ def write_new(path: Path, content: bytes) -> None:
 
 
 def write_json(path: Path, value: dict[str, object]) -> None:
-    write_new(
-        path, (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
-    )
+    content = (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+    if len(content) > MAX_METADATA_BYTES:
+        raise SessionError("Local metadata exceeds the 8 MiB persistence limit.")
+    write_new(path, content)
 
 
 def stage_session(source: Path, runtime: Path, skill: Path, *, model: str = "fixture") -> Path:
@@ -127,7 +128,7 @@ class Session:
 
     def _read_json(self, name: str) -> dict[str, object]:
         path = self.root / name
-        if path.stat().st_size > MAX_BYTES:
+        if path.stat().st_size > MAX_METADATA_BYTES:
             raise SessionError(f"Oversized local metadata: {name}")
         value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
