@@ -75,6 +75,8 @@ class PluginPackageTests(unittest.TestCase):
             self.assertIn("pcb_inspect", body)
             self.assertIn("PNG", body)
             self.assertIn("untrusted", body)
+            self.assertIn("pcb_reference_rule", body)
+            self.assertIn("textbooks", body)
             self.assertNotIn("${", body)
             self.assertNotIn("powershell", body.lower())
         execution = (self.root / "skills" / "pcb-placement-execute" / "SKILL.md").read_text(encoding="utf-8")
@@ -99,6 +101,8 @@ class PluginPackageTests(unittest.TestCase):
         self.assertIn("integration-config", install)
         self.assertNotIn('"pip"', startup)
         self.assertNotIn("pip install", startup)
+        self.assertNotIn('environment_values["OPA_KNOWLEDGE_DB"] =', startup)
+        self.assertIn('str(root) + "[integrations]"', install)
 
 
 if __name__ == "__main__":

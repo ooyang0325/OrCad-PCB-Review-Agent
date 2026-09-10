@@ -63,7 +63,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(names, {
                 "pcb_sessions", "pcb_inspect", "pcb_prepare_placement", "pcb_apply_placement",
                 "pcb_execution_status", "pcb_inspection_status", "pcb_reference_catalog",
-                "pcb_reference_search", "pcb_reference_page",
+                "pcb_reference_search", "pcb_reference_page", "pcb_reference_rule",
             })
             apply = next(tool for tool in tools if tool.name == "pcb_apply_placement")
             self.assertEqual(set(apply.input_schema["properties"]), {"session", "proposal"})
@@ -210,7 +210,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("image_error", result.structured_content)
         self.assertEqual(len(self.actions.applied), 1)
 
-    async def test_invalid_inputs_and_unconfigured_references_are_explicit(self):
+    async def test_invalid_inputs_and_optional_original_pages_are_explicit(self):
         from mcp import Client
 
         async with Client(self.server) as client:
@@ -218,8 +218,18 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result.is_error)
             self.assertEqual(self.actions.calls, [])
             result = await client.call_tool("pcb_reference_catalog", {})
+            self.assertFalse(result.is_error)
+            self.assertEqual(result.structured_content["data"]["bundled"]["card_count"], 36)
+            result = await client.call_tool("pcb_reference_search", {"query": "decoupling"})
+            self.assertFalse(result.is_error)
+            card_id = result.structured_content["data"]["hits"][0]["card_id"]
+            result = await client.call_tool("pcb_reference_rule", {"card_id": card_id})
+            self.assertFalse(result.is_error)
+            self.assertTrue(result.structured_content["data"]["checks"])
+            result = await client.call_tool("pcb_reference_page", {"source": "original.pdf", "page": 1})
             self.assertTrue(result.is_error)
-            self.assertIn("knowledge", result.structured_content["error"])
+            self.assertIn("not bundled", result.structured_content["error"])
+            self.assertEqual(self.actions.calls, [])
 
     async def test_real_stdio_entrypoint_runs_without_repository_cwd(self):
         from mcp import Client, StdioServerParameters
@@ -231,9 +241,10 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             cwd=self.temp.name, env=environment,
         )
         async with Client(parameters, mode="legacy", read_timeout_seconds=15) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 9)
+            self.assertEqual(len((await client.list_tools()).tools), 10)
             result = await client.call_tool("pcb_reference_catalog", {})
-            self.assertTrue(result.is_error)
+            self.assertFalse(result.is_error)
+            self.assertEqual(result.structured_content["data"]["bundled"]["card_count"], 36)
 
 
 if __name__ == "__main__":

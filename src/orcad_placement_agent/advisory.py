@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import uuid
 
-from . import knowledge
+from . import expertise, knowledge, references
 from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
 from .proposals import check_snapshot
 from .session import write_json
@@ -86,7 +86,7 @@ def _visual_context(path: Path) -> tuple[dict[str, object], Path]:
 
 
 def build_context(
-    goal: str, database: Path = knowledge.DEFAULT_DATABASE, *,
+    goal: str, database: Path | None = None, *,
     topics: tuple[str, ...] = ("placement", "decoupling", "return-paths"),
     snapshot: Path | None = None,
     visual: Path | None = None,
@@ -102,36 +102,46 @@ def build_context(
         if snapshot is not None and snapshot.resolve() != visual_snapshot:
             raise ProtocolError("The supplied snapshot is not the visual observation's post-capture snapshot.")
         snapshot = visual_snapshot
-    documents = knowledge.catalog(database)
+    coverage = references.catalog(database)
+    documents = coverage["documents"]
+    warnings = list(coverage["warnings"])
     queries = []
     evidence: list[dict[str, object]] = []
     seen = set()
     for topic in dict.fromkeys(topics):
         for query in TOPIC_QUERIES[topic]:
-            result = knowledge.search(query, database, limit=3)
+            result = references.search(query, database, limit=3, topic=topic)
+            warnings.extend(result["warnings"])
             queries.append({
                 "topic": topic, "query": query, "match_mode": result["match_mode"],
-                "hit_count": len(result["hits"]),
+                "hit_count": len(result["hits"]), "supplement_hit_count": len(result["supplement_hits"]),
+                "supplement_status": result["supplement_status"],
             })
-            for hit in result["hits"]:
-                key = (hit["source"], hit["pdf_page"])
+            for hit in [*result["hits"], *result["supplement_hits"]]:
+                bundled = hit["source_kind"] == "bundled_synthesis"
+                key = ("rule", hit["card_id"]) if bundled else ("pdf", hit["source"], hit["pdf_page"])
                 if key in seen:
                     continue
                 seen.add(key)
-                evidence.append({"evidence_id": f"E{len(evidence) + 1}", "topic": topic, **hit})
+                entry = {"evidence_id": f"E{len(evidence) + 1}", "topic": topic, **hit}
+                if bundled:
+                    entry["guidance"] = expertise.rule(hit["card_id"])
+                evidence.append(entry)
     snapshot_context = _snapshot_context(snapshot) if snapshot is not None else None
     if visual_context is not None and snapshot_context["request_id"] != visual_context["after_request_id"]:
         raise ProtocolError("Visual observation and snapshot content have different request IDs.")
     context: dict[str, object] = {
-        "schema_version": 1, "kind": "pcb-advisory-context",
+        "schema_version": 2, "kind": "pcb-advisory-context",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "evidence_freshness": "Source metadata was checked during generation; regenerate after reference changes.",
+        "evidence_freshness": "Bundled guidance is release-versioned synthesis, not a live book read. Optional PDF metadata is checked when configured.",
         "goal": goal.strip(), "topics": list(dict.fromkeys(topics)),
         "backend_capabilities": backend_capabilities(),
         "snapshot": snapshot_context,
         "visual": visual_context,
-        "evidence": evidence, "queries": queries,
+        "evidence": evidence, "queries": queries, "warnings": list(dict.fromkeys(warnings)),
         "coverage": {
+            "bundled": coverage["bundled"],
+            "supplement_status": coverage["supplement_status"],
             "documents": len(documents),
             "indexed_pages": sum(item["indexed_pages"] for item in documents),
             "incomplete_documents": [

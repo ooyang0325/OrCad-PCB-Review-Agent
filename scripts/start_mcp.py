@@ -54,8 +54,6 @@ def main():
         raise RuntimeError("Plugin and runtime versions differ; install the matching version separately.")
     environment_values = dict(os.environ)
     environment_values["LOCALAPPDATA"] = str(data)
-    if not environment_values.get("OPA_KNOWLEDGE_DB"):
-        environment_values["OPA_KNOWLEDGE_DB"] = str(data / "OrCadPlacementAgent" / "knowledge.sqlite3")
     # Explicit standard handles preserve MCP pipes on Windows. os.execve does
     # not provide a reliable process/pipe handoff for this launcher there.
     command = [str(python), "-I", "-X", "utf8", "-m", "orcad_placement_agent.mcp_server"]

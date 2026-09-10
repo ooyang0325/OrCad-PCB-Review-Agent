@@ -273,6 +273,12 @@ def _catalog(connection: sqlite3.Connection, metadata: dict[str, str]) -> list[d
     root = Path(metadata["books_root"])
     documents = []
     for row in connection.execute("SELECT * FROM documents ORDER BY path COLLATE NOCASE"):
+        try:
+            notices = json.loads(row["notices"])
+        except (json.JSONDecodeError, TypeError) as error:
+            raise KnowledgeError("Invalid reference-index notices; rebuild the optional index.") from error
+        if not isinstance(notices, list) or not all(isinstance(item, str) for item in notices):
+            raise KnowledgeError("Reference-index notices must be a list of text; rebuild the optional index.")
         path = root / row["path"]
         try:
             stat = path.stat()
@@ -286,7 +292,7 @@ def _catalog(connection: sqlite3.Connection, metadata: dict[str, str]) -> list[d
         documents.append({
             "source": row["path"], "title": row["title"], "pdf_pages": row["total_pages"],
             "indexed_pages": row["indexed_pages"], "status": row["status"],
-            "fresh": fresh, "notices": json.loads(row["notices"]),
+            "fresh": fresh, "notices": notices,
         })
     return documents
 

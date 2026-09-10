@@ -55,7 +55,11 @@ class AdvisoryTests(unittest.TestCase):
         ids = [item["evidence_id"] for item in context["evidence"]]
         self.assertEqual(len(ids), len(set(ids)))
         for item in context["evidence"]:
-            self.assertIn("PDF page", item["citation"])
+            if item["source_kind"] == "local_pdf":
+                self.assertIn("PDF page", item["citation"])
+            else:
+                self.assertIn(item["card_id"], item["citation"])
+                self.assertTrue(item["guidance"]["limits"])
             self.assertLessEqual(len(item["excerpt"]), 450)
 
     def test_archived_snapshot_is_not_a_live_precondition(self):
@@ -189,7 +193,8 @@ class AgentProfileTests(unittest.TestCase):
             self.assertTrue(lines["description"].strip())
             self.assertEqual(
                 set(json.loads(lines["tools"])),
-                {"read", "search", "pcb_sessions", "pcb_inspect", "pcb_inspection_status"} | extra_tools[profile.name],
+                {"read", "search", "pcb_sessions", "pcb_inspect", "pcb_inspection_status",
+                 "pcb_reference_catalog", "pcb_reference_search", "pcb_reference_rule"} | extra_tools[profile.name],
             )
             self.assertLess(len(prompt), 30000)
             self.assertIn("PNG", prompt)

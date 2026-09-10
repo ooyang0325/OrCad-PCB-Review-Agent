@@ -65,6 +65,19 @@ assert.equal(JSON.parse(failedImage.textResultForLlm).status, "applied");
 assert.equal(h.requests.filter(r => r.action === "apply").length, 1);
 for (const tool of h.tools) assert.equal(tool.parameters.additionalProperties, false);
 assert.deepEqual(Object.keys(h.apply.parameters.properties), ["session", "proposal"]);
+h = harness();
+for (const [name, args, action] of [
+    ["pcb_reference_catalog", {}, "reference-catalog"],
+    ["pcb_reference_search", { query: "decoupling" }, "reference-search"],
+    ["pcb_reference_rule", { card_id: "pt-example" }, "reference-rule"],
+]) {
+    const tool = h.tools.find(t => t.name === name);
+    assert.ok(tool);
+    assert.equal((await tool.handler(args)).resultType, "success");
+    assert.equal(h.requests.at(-1).action, action);
+    assert.equal((await tool.handler({ ...args, database: "outside" })).resultType, "failure");
+}
+assert.equal(h.prompts.length, 0);
 let modeChecks = 0;
 let dispatched = false;
 const switched = createPlacementTools({

@@ -77,6 +77,17 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
     }
 
     const tools = [
+        tool("pcb_reference_catalog",
+            "List bundled original PCB expertise and stable rule IDs. No books, index, network, or board session required.",
+            schema({}), "reference-catalog", []),
+        tool("pcb_reference_search",
+            "Search bundled PCB guidance. Retrieve full rules by card_id before applying principles to a design.",
+            schema({ query: { type: "string", minLength: 1, maxLength: 500 } }),
+            "reference-search", ["query"]),
+        tool("pcb_reference_rule",
+            "Read complete bundled guidance: applicability, required inputs, checks, tradeoffs, limits, and development-time source provenance. Not a runtime book read.",
+            schema({ card_id: { type: "string", pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", maxLength: 64 } }),
+            "reference-rule", ["card_id"]),
         tool("pcb_sessions",
             "List recorded managed PCB sessions and declared backend capabilities. Neither proves live readiness; do not select an unrelated session.",
             schema({}), "sessions", []),

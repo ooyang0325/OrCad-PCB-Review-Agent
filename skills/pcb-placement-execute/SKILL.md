@@ -9,6 +9,11 @@ reviewed proposal ID and managed session. This local Windows workflow uses the
 MCP server `orcad-placement`; tool names may be host-prefixed. If it is missing,
 report setup requirements rather than using shell/raw SKILL or GUI workarounds.
 
+Retrieve rule IDs in the handoff with `pcb_reference_rule` to understand checks
+and limits. `pcb_reference_search`/`pcb_reference_catalog` need no books, index,
+or packet; never ask for textbooks. Bundled rules and their development-time
+bibliography are not approval or permission to revise an exact reviewed pose.
+
 ## Mandatory sequence
 
 For a coordinator's work package, process only the exact reviewed proposals

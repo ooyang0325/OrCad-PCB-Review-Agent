@@ -167,7 +167,7 @@ class KnowledgeTests(unittest.TestCase):
             ])
         self.assertEqual(result, 0)
         native.assert_not_called()
-        self.assertEqual(json.loads(output.getvalue())["hits"][0]["pdf_page"], 1)
+        self.assertEqual(json.loads(output.getvalue())["supplement_hits"][0]["pdf_page"], 1)
 
 
 class RealPDFExtractionTests(unittest.TestCase):

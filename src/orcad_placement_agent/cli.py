@@ -19,7 +19,7 @@ from .protocol import ProtocolError, Request
 from .proposals import approve_and_apply, load_proposal, propose, proposal_summary
 from .session import Session, SessionError, stage_session
 from .transport import IndeterminateDelivery, TransportError, WindowsAPI
-from . import knowledge
+from . import expertise, knowledge, references
 from .advisory import TOPIC_QUERIES, build_context
 from .resources import asset_directory
 from .installation import CLIENTS, write_configurations
@@ -70,12 +70,14 @@ def main(argv: list[str] | None = None) -> int:
         if command == "apply":
             sub.add_argument("--proposal", required=True, help="The full SHA256 proposal identifier.")
     references = commands.add_parser(
-        "knowledge", help="Index and search local PCB reference PDFs; no network or board access."
+        "knowledge", help="Search bundled PCB expertise; optionally index local PDFs. No network or board access."
     )
     reference_commands = references.add_subparsers(dest="knowledge_command", required=True)
-    for operation in ("index", "catalog", "search", "page"):
+    for operation in ("index", "catalog", "search", "page", "rule"):
         sub = reference_commands.add_parser(operation)
-        sub.add_argument("--database", type=Path, default=knowledge.DEFAULT_DATABASE)
+        sub.add_argument("--database", type=Path,
+                         default=knowledge.DEFAULT_DATABASE if operation == "index" else None,
+                         help="Optional PDF supplement; built-in expertise needs no database.")
         sub.add_argument("--json", action="store_true")
         if operation == "index":
             sub.add_argument("--books", type=Path, default=knowledge.DEFAULT_BOOKS)
@@ -83,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
         elif operation == "search":
             sub.add_argument("query")
             sub.add_argument("--limit", type=int, default=5)
+        elif operation == "rule":
+            sub.add_argument("card_id")
         elif operation == "page":
             sub.add_argument("source", help="Exact source name returned by search/catalog.")
             sub.add_argument("--page", type=int, required=True, dest="page_number")
@@ -92,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         "agent-context", help="Prepare a local evidence packet for read-only PCB expert agents."
     )
     context.add_argument("--goal", required=True)
-    context.add_argument("--database", type=Path, default=knowledge.DEFAULT_DATABASE)
+    context.add_argument("--database", type=Path, help="Optional indexed PDF supplement.")
     context.add_argument("--topic", action="append", choices=tuple(TOPIC_QUERIES))
     context.add_argument("--snapshot", type=Path, help="Optional saved snapshot receipt JSON; never a .brd.")
     context.add_argument("--visual", type=Path, help="Optional visual observation metadata; links its PNG and matching snapshot.")
@@ -241,17 +245,24 @@ def _knowledge_command(args: argparse.Namespace) -> int:
     if args.knowledge_command == "index":
         result = knowledge.index_books(args.books, args.database, rebuild=args.rebuild)
     elif args.knowledge_command == "catalog":
-        result = {"documents": knowledge.catalog(args.database)}
+        result = references.catalog(args.database)
     elif args.knowledge_command == "search":
-        result = knowledge.search(args.query, args.database, limit=args.limit)
+        result = references.search(args.query, args.database, limit=args.limit)
+    elif args.knowledge_command == "rule":
+        result = expertise.rule(args.card_id)
     else:
-        result = knowledge.page(
+        result = references.page(
             args.source, args.page_number, args.database,
             offset=args.offset, characters=args.characters,
         )
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=True))
     elif "documents" in result:
+        if "bundled" in result:
+            print(f"Bundled PCB expertise: {result['bundled']['card_count']} rules (v{result['bundled']['version']}).")
+            for pack in result["bundled"]["packs"]:
+                print(f"{pack['title']}: {pack['card_count']} rules")
+            print(f"Optional PDF supplement: {result['supplement_status']}")
         if args.knowledge_command == "index":
             print(f"Updated {result['updated']}; unchanged {result['unchanged']}; removed {result['removed']}.")
         for item in result["documents"]:
@@ -264,10 +275,18 @@ def _knowledge_command(args: argparse.Namespace) -> int:
         print(f"Match mode: {result['match_mode']}")
         for hit in result["hits"]:
             print(f"\n{hit['citation']}\n{hit['excerpt']}")
+            print(f"Full guidance: knowledge rule {hit['card_id']}")
+        for hit in result["supplement_hits"]:
+            print(f"\nOptional PDF: {hit['citation']}\n{hit['excerpt']}")
         if not result["hits"]:
-            print("No matching indexed evidence was found.")
+            print("No matching bundled guidance was found.")
+    elif result.get("source_kind") == "bundled_synthesis":
+        print(json.dumps(result, indent=2, ensure_ascii=True))
     else:
         print(f"{result['citation']}\n{result['text']}")
         if result["truncated"]:
             print(f"[Excerpt at offset {result['offset']}; {result['total_characters']} characters on page.]")
+    if not args.json:
+        for warning in result.get("warnings", []):
+            print(f"Warning: {warning}")
     return 0

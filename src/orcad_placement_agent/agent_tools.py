@@ -9,6 +9,7 @@ from typing import Callable
 
 from .diagnostics import ConfigurationError, default_runtime_directory
 from .capabilities import backend_capabilities
+from . import expertise
 from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
 from .proposals import approve_and_apply, load_proposal, propose, proposal_summary
 from .session import Session, SessionError, write_json
@@ -122,6 +123,24 @@ class AgentActions:
         if not isinstance(request, dict) or not isinstance(request.get("action"), str):
             raise AgentActionError("A typed action object is required.")
         action = request["action"]
+        if action in {"reference-catalog", "reference-search", "reference-rule"}:
+            fields = {
+                "reference-catalog": {"action"},
+                "reference-search": {"action", "query"},
+                "reference-rule": {"action", "card_id"},
+            }
+            if set(request) != fields[action]:
+                raise AgentActionError("Unexpected or missing bundled-reference fields.")
+            try:
+                if action == "reference-catalog":
+                    data = expertise.catalog()
+                elif action == "reference-search":
+                    data = expertise.search(request["query"])
+                else:
+                    data = expertise.rule(request["card_id"])
+            except expertise.KnowledgeError as error:
+                raise AgentActionError(str(error)) from error
+            return {"status": "reference", "data": data}
         if action == "sessions":
             if set(request) != {"action"}:
                 raise AgentActionError("Session discovery takes no paths or additional fields.")

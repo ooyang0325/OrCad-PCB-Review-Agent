@@ -48,12 +48,14 @@ def main():
     environment = (args.environment_directory or data / "OrCadPlacementAgent" / "plugin-envs" / version).absolute()
     python = environment / "Scripts" / "python.exe"
     marker = environment / ".orcad-placement-environment.json"
-    configurations = environment / "client-configs"
+    configurations = environment / ("client-configs-with-books" if args.books is not None else "client-configs")
     knowledge = data / "OrCadPlacementAgent" / "knowledge.sqlite3"
     if args.plan:
         print(json.dumps({
             "version": version, "environment": str(environment), "python": str(python),
-            "client_configurations": str(configurations), "knowledge_database": str(knowledge),
+            "client_configurations": str(configurations),
+            "knowledge_database": str(knowledge) if args.books is not None else None,
+            "bundled_expertise": True, "pdf_dependencies": args.books is not None,
             "client_settings_modified": False, "native_board_operations": False,
             "py_launcher_available": shutil.which("py") is not None,
         }, indent=2))
@@ -83,16 +85,22 @@ def main():
         lock.mkdir()
         try:
             run([python, "-I", "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                 str(root) + "[integrations,knowledge]"])
+                 str(root) + "[integrations]"])
         finally:
             lock.rmdir()
     run([python, "-I", "-c",
-         "import pypdf, fontTools; from orcad_placement_agent.mcp_server import create_server; create_server()"])
+         "from orcad_placement_agent import expertise; expertise.catalog(); "
+         "from orcad_placement_agent.mcp_server import create_server; create_server()"])
     if args.books is not None:
+        run([python, "-I", "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+             str(root) + "[integrations,knowledge]"])
         run([python, "-I", "-X", "utf8", "-m", "orcad_placement_agent", "knowledge", "index",
              "--books", args.books, "--database", knowledge])
-    run([python, "-I", "-X", "utf8", "-m", "orcad_placement_agent", "integration-config",
-         "--client", args.client, "--output-directory", configurations, "--knowledge-db", knowledge])
+    command = [python, "-I", "-X", "utf8", "-m", "orcad_placement_agent", "integration-config",
+               "--client", args.client, "--output-directory", configurations]
+    if args.books is not None:
+        command += ["--knowledge-db", knowledge]
+    run(command)
     print(f"Installed runtime: {python}")
     print("Review the generated snippets and add only the orcad-placement server in your client.")
     print("No client settings, PATH, Cadence settings, board files, or execution policies were changed.")
