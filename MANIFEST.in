@@ -1,0 +1,11 @@
+include README.md
+recursive-include skill *.il
+include fixtures/access-proof/create.il
+include fixtures/access-proof/opa_fixture_device.txt
+include fixtures/access-proof/README.md
+prune doc
+prune pcb_design_book
+prune design
+prune .runtime
+prune .venv
+global-exclude *.brd *.dra *.pad *.psm *.pdf *.png *.sqlite3 *.pyc

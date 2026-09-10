@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "orcad-placement",
+  "version": "0.2.0",
+  "description": "Windows-only Cadence PCB placement workflows with native images, local references, and exact human approval. Initial native writes are fixture-scoped.",
+  "author": {
+    "name": "oo_yang",
+    "url": "https://github.com/ooyang0325"
+  },
+  "homepage": "https://github.com/ooyang0325/OrCad-PCB-Review-Agent",
+  "repository": "https://github.com/ooyang0325/OrCad-PCB-Review-Agent",
+  "keywords": ["pcb", "cadence", "orcad", "allegro", "placement", "windows"]
+}

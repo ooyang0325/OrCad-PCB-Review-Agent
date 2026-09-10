@@ -192,7 +192,7 @@ def _window_png(editor: EditorWindow) -> bytes:
 def bounded_capture(editor: EditorWindow, timeout: float = 12.0) -> WindowImage:
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "orcad_placement_agent.visuals", "_capture"],
+            [sys.executable, "-I", "-X", "utf8", "-m", "orcad_placement_agent.visuals", "_capture"],
             input=json.dumps(asdict(editor)).encode("utf-8"), capture_output=True,
             timeout=timeout, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )

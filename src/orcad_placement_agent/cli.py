@@ -21,6 +21,8 @@ from .session import Session, SessionError, stage_session
 from .transport import IndeterminateDelivery, TransportError, WindowsAPI
 from . import knowledge
 from .advisory import TOPIC_QUERIES, build_context
+from .resources import asset_directory
+from .installation import CLIENTS, write_configurations
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,13 +43,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Stage a trusted read-only SKILL probe without starting Cadence.",
     )
     probe.add_argument("--runtime-dir", type=Path)
-    probe.add_argument("--skill-dir", type=Path, default=Path("skill"))
+    probe.add_argument("--skill-dir", type=Path, help="Explicit trusted source override; packaged assets are the default.")
     probe.add_argument("--json", action="store_true")
     commands.add_parser("editors", help="List visible classic editor identities; do not select one.")
     stage = commands.add_parser("stage", help="Copy a source board and trusted adapter into a fresh session.")
     stage.add_argument("source", type=Path)
     stage.add_argument("--runtime-dir", type=Path)
-    stage.add_argument("--skill-dir", type=Path, default=Path("skill"))
+    stage.add_argument("--skill-dir", type=Path, help="Explicit trusted source override; packaged assets are the default.")
     attach = commands.add_parser("attach", help="Bind the staged copy to an explicit editor through a read-only handshake.")
     attach.add_argument("--session", type=Path, required=True)
     attach.add_argument("--hwnd", type=lambda value: int(value, 0), required=True)
@@ -96,9 +98,27 @@ def main(argv: list[str] | None = None) -> int:
     context.add_argument("--visual", type=Path, help="Optional visual observation metadata; links its PNG and matching snapshot.")
     context.add_argument("--output-directory", type=Path, default=Path(".runtime") / "advisory")
     context.add_argument("--json", action="store_true")
+    install_config = commands.add_parser(
+        "integration-config", help="Generate client MCP snippets without editing client settings."
+    )
+    install_config.add_argument("--client", choices=(*CLIENTS, "all"), default="all")
+    install_config.add_argument("--output-directory", type=Path, required=True)
+    install_config.add_argument("--knowledge-db", type=Path)
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "integration-config":
+            paths = write_configurations(
+                args.output_directory,
+                clients=CLIENTS if args.client == "all" else (args.client,),
+                knowledge_database=args.knowledge_db,
+            )
+            print(json.dumps({
+                "generated": [str(path) for path in paths],
+                "client_settings_modified": False,
+                "instruction": "Merge only the named server entry into your client settings, or use its MCP add command.",
+            }, indent=2))
+            return 0
         if args.command == "agent-context":
             path, context = build_context(
                 args.goal, args.database,
@@ -132,7 +152,9 @@ def main(argv: list[str] | None = None) -> int:
             else default_runtime_directory()
         )
         if args.command == "stage":
-            root = stage_session(args.source, runtime, args.skill_dir)
+            root = stage_session(
+                args.source, runtime, args.skill_dir if args.skill_dir is not None else asset_directory("skill")
+            )
             bootstrap = json.dumps(str(root / "bootstrap.il"))
             print(f"Session: {root}")
             print(f"Open only this copy in the dedicated editor: {root / 'working.brd'}")
@@ -140,7 +162,9 @@ def main(argv: list[str] | None = None) -> int:
             print("Then run editors and attach with the explicit HWND and --session path.")
             return 0
         if args.command == "stage-probe":
-            staged = stage_probe(runtime, args.skill_dir)
+            staged = stage_probe(
+                runtime, args.skill_dir if args.skill_dir is not None else asset_directory("skill")
+            )
             if args.json:
                 print(json.dumps(staged.to_dict(), indent=2))
             else:

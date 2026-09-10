@@ -85,3 +85,11 @@ response to the reviewer. The executor can submit an exact visually grounded
 proposal to the [interactive approval workflow](docs/agent-execution.md).
 Approval is collected from the human by the host UI, never supplied by the
 model. No implicit Save is performed, and fixture-only native limits remain.
+
+## Portable clients
+
+The optional [local MCP interface](docs/mcp.md) exposes the bounded tools to
+other MCP-capable clients. Install `.[integrations]` from this trusted repository
+and use an isolated Python command; do not install an unrelated similarly named
+package from a registry. Wheels include the original native runtime assets,
+not the local books or board files.

@@ -161,7 +161,7 @@ class PNGTests(unittest.TestCase):
                 bounded_capture(EDITOR)
         self.assertEqual(run.call_args.kwargs["timeout"], 12)
         self.assertEqual(run.call_args.args[0][1:],
-                         ["-m", "orcad_placement_agent.visuals", "_capture"])
+                         ["-I", "-X", "utf8", "-m", "orcad_placement_agent.visuals", "_capture"])
 
     def test_worker_failure_and_invalid_output_do_not_become_images(self):
         for code, data in [(2, b""), (0, b"not an image")]:

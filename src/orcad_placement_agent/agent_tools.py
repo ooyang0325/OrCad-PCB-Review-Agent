@@ -29,6 +29,18 @@ def json_wire(value: object) -> object:
     return value
 
 
+def display_payload(value: object) -> object:
+    """Compact tool presentation; complete native receipts stay on disk."""
+    if isinstance(value, str) and value.startswith("OPA-FIXTURE-1;"):
+        return {"opaque_scene_omitted_from_display": True,
+                "instruction": "Use the persisted native receipt for complete scene data."}
+    if isinstance(value, dict):
+        return {key: display_payload(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [display_payload(item) for item in value]
+    return json_wire(value)
+
+
 def capture_visual(session: Session) -> dict[str, object]:
     from .visuals import VisualError, capture_observation
 
@@ -257,7 +269,7 @@ def main() -> int:
             raise AgentActionError("Agent action exceeds the input limit.")
         request = json.loads(payload.decode("utf-8"))
         response = AgentActions().dispatch(request)
-        print(json.dumps(json_wire(response), ensure_ascii=True))
+        print(json.dumps(display_payload(response), ensure_ascii=True))
         return 0
     except IndeterminateDelivery as error:
         print(json.dumps({"status": "indeterminate", "error": str(error), "retry": False}))
