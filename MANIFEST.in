@@ -1,4 +1,5 @@
 include README.md
+recursive-include src/orcad_placement_agent/_knowledge *.json
 recursive-include skill *.il
 include fixtures/access-proof/create.il
 include fixtures/access-proof/opa_fixture_device.txt

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orcad-placement-agent"
-version = "0.3.0"
+version = "0.4.0"
 description = "Human-approved local placement access for Cadence PCB Editor"
 readme = "README.md"
 authors = [{name = "oo_yang"}]
@@ -25,6 +25,9 @@ orcad-placement-mcp = "orcad_placement_agent.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+orcad_placement_agent = ["_knowledge/*.json"]
 
 [tool.setuptools.cmdclass]
 build_py = "orcad_placement_agent._build.BuildWithRuntimeAssets"

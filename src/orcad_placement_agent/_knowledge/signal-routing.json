@@ -1,0 +1,641 @@
+{
+  "schema_version": 1,
+  "pack_id": "signal-routing",
+  "title": "Signal paths and routing readiness",
+  "summary": "Original review guidance for planning signal paths, return continuity, termination, timing, isolation and package escape. These cards identify required evidence and design tradeoffs; they do not establish electrical compliance or authorize board edits.",
+  "sources": [
+    {
+      "id": "bogatin-si-pi-second",
+      "title": "Signal and Power Integrity - Simplified",
+      "authors": ["Eric Bogatin"],
+      "edition": "Second edition",
+      "year": 2010,
+      "local_filename": "70d823f6-f7f1-461a-9fc5-eed2d9acf535.pdf",
+      "identity_note": "Title, author and edition verified on physical PDF page 4. Page 5 gives copyright 2010 and first printing July 2009; year records the copyright year. The indexed title is a numeric filename. Extracted formulas contain encoding damage and were not used for numerical rules."
+    },
+    {
+      "id": "sierra-high-speed-guide",
+      "title": "High-Speed PCB Design Guide",
+      "authors": [],
+      "edition": null,
+      "year": 2020,
+      "local_filename": "addc6240-6ef2-4c26-aef3-3ad945773b19.pdf",
+      "identity_note": "Title verified on physical PDF page 1; page 32 credits Sierra Circuits Inc., copyright 2020. Page 2 identifies Amit Bahl as the foreword signer, not as the book author. No edition or author credit was established. General spacing and grounding prescriptions require design-specific review."
+    },
+    {
+      "id": "orcad-forty-tips",
+      "title": "40 PCB Design Tips Every Designer Should Know",
+      "authors": [],
+      "edition": null,
+      "year": null,
+      "local_filename": "40 PCB Design Tips Every Designer Should Know.pdf",
+      "identity_note": "Physical PDF page 1 verifies the title and an OrCAD anniversary statement. The inspected pages do not establish named authors, an edition or a publication year. This introductory guide supports planning checks, not universal package-pitch or electrical limits."
+    },
+    {
+      "id": "freescale-an2536",
+      "title": "High Speed Layout Design Guidelines: MC9328MX1, MC9328MXL, and MC9328MXS",
+      "authors": [],
+      "edition": "AN2536, Rev. 2",
+      "year": 2006,
+      "local_filename": "b743447c-48f4-4ab3-b066-cbfee3904e0a.pdf",
+      "identity_note": "Physical PDF page 1 identifies the title, Freescale Semiconductor application note AN2536, revision 2, April 2006, and supported i.MX devices. No personal author is credited there. Its numerical case-study recommendations are device-specific and are not generalized in this pack."
+    }
+  ],
+  "cards": [
+    {
+      "id": "si-edge-rate-floorplan",
+      "title": "Prioritize paths by edge behavior and timing",
+      "topics": ["placement", "routing-readiness"],
+      "tags": ["signal integrity", "rise time", "fall time", "electrical length", "flight time", "floorplan", "controlled impedance"],
+      "principle": "A low repetition rate does not make an interconnect electrically slow: reflections depend on transition time, propagation delay and the impedances at each end. Before fixing component positions, identify paths needing controlled geometry and reserve their routing and termination space.",
+      "applies_when": [
+        "Placing devices with fast digital outputs or timing-critical interfaces",
+        "Changing a driver family, slew setting, stackup or interconnect length"
+      ],
+      "required_inputs": [
+        "Fastest relevant output rise and fall times across operating corners",
+        "Driver and receiver models or electrical specifications",
+        "Proposed stackup and propagation-delay estimates",
+        "Connectivity, topology and termination requirements",
+        "Receiver noise and timing budgets"
+      ],
+      "checks": [
+        "Classify critical nets using edge behavior and estimated flight time, not only clock frequency.",
+        "Orient connected devices so critical pin groups have feasible corridors with the intended reference planes.",
+        "Include package escape, connectors and likely detours in path estimates rather than using component-center distance.",
+        "Reserve footprints and connections for the selected termination before surrounding placement becomes fixed.",
+        "Record missing timing or model inputs as unresolved rather than applying a universal length threshold."
+      ],
+      "tradeoffs": [
+        "A compact floorplan can reduce delay but leave insufficient escape width or isolation.",
+        "A slower supported slew setting may reduce excitation but must preserve timing and receiver requirements."
+      ],
+      "failure_modes": [
+        "An apparently low-speed control line rings because its edges are fast.",
+        "Late routing detours invalidate the delay or termination assumptions used during placement."
+      ],
+      "limits": [
+        "An unrouted floorplan cannot establish waveform quality or timing closure.",
+        "These planning checks do not add initial-placement or routing capabilities to the fixture-only backend."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [97, 330, 332],
+          "support": "Distinguishes clock rate from transition bandwidth and relates reflection significance to delay, rise time and acceptable noise."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [78, 80],
+          "support": "Connects early floorplanning with routing space, functional paths and termination placement."
+        }
+      ]
+    },
+    {
+      "id": "si-continuous-return-corridor",
+      "title": "Plan a continuous signal-and-return corridor",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["reference plane", "return current", "loop inductance", "plane split", "antipad", "copper void"],
+      "principle": "The reference conductor is part of the signal path, not merely a net label. Where inductive effects dominate, a plane lets return current concentrate near the trace; slots, edges and joined antipads can force detours that alter impedance and increase coupling.",
+      "applies_when": [
+        "Planning critical single-ended or differential routes",
+        "Reviewing plane islands, connectors, dense via fields or board-edge routing"
+      ],
+      "required_inputs": [
+        "Layer stackup and the reference conductor for each proposed signal layer",
+        "Actual plane copper, clearances, splits and keepouts",
+        "Planned route corridors and component pin locations",
+        "Signal edge behavior and permitted discontinuity budget"
+      ],
+      "checks": [
+        "Trace the intended forward path and identify its adjacent return conductor along the entire route.",
+        "Overlay routing corridors on plane copper and inspect slots, antipad chains, narrow necks and plane edges.",
+        "Move the corridor or revise placement when a critical path would cross an unsupported reference region.",
+        "Check that driver and receiver reference connections reach the intended plane without a shared narrow detour.",
+        "Recheck return continuity after fanout and plane-fill changes; a schematic ground connection is not sufficient evidence."
+      ],
+      "tradeoffs": [
+        "Routing around a void adds length but can avoid a more severe return-path discontinuity.",
+        "A wider plane corridor may compete with escape vias or multiple supply regions."
+      ],
+      "failure_modes": [
+        "A trace crosses a split even though both components show ground connectivity.",
+        "Overlapping via clearances create an unintended barrier underneath an otherwise uniform trace."
+      ],
+      "limits": [
+        "Return-current distribution depends on frequency and geometry; it is not confined to a fixed-width strip.",
+        "Copper continuity or a clean DRC result does not prove SI or EMI compliance."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [270, 271, 272, 273],
+          "support": "Explains the propagating signal-return loop and how a disturbed return path changes the electrical behavior."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [36, 38],
+          "support": "Identifies reference splits and concentrated via clearances as routing-continuity hazards."
+        }
+      ]
+    },
+    {
+      "id": "si-source-series-termination",
+      "title": "Place source termination around the real topology",
+      "topics": ["placement", "routing-readiness"],
+      "tags": ["series termination", "source impedance", "point-to-point", "reflection", "driver", "receiver tap"],
+      "principle": "For a compatible point-to-point interface, a series element near the driver can make the effective source impedance absorb a returning reflection. The receiver at the far end and a receiver tapped near the source do not see the same waveform, so a source-terminated route must not be treated as an arbitrary multidrop bus.",
+      "applies_when": [
+        "A device specification or analysis selects source-series termination",
+        "Reviewing optional damping footprints or adding loads to an existing net"
+      ],
+      "required_inputs": [
+        "Driver output impedance or IBIS model across operating corners",
+        "Trace impedance and propagation delay",
+        "All receiver and test-point locations",
+        "Receiver thresholds and allowable settling time",
+        "Existing internal termination or programmable drive settings"
+      ],
+      "checks": [
+        "Verify that the intended topology and interface permit source-series termination.",
+        "Place the resistor so the driver-to-resistor segment is short relative to the edge-time budget.",
+        "Estimate the required resistance from the combined driver and series impedance, then validate with the actual driver behavior.",
+        "Keep unplanned receiver taps off the source-side portion of the terminated line.",
+        "Check settling, overshoot and threshold crossings at every load and relevant operating corner."
+      ],
+      "tradeoffs": [
+        "Source termination avoids a permanent shunt load but can create intermediate voltage steps along the line.",
+        "Provisioning a resistor supports tuning but adds a footprint and local discontinuity."
+      ],
+      "failure_modes": [
+        "A copied resistor value ignores the selected driver's output impedance.",
+        "A new near-source clock input responds to a reflection-induced voltage shelf."
+      ],
+      "limits": [
+        "A resistor at the driver does not establish acceptable waveforms for a branched or bidirectional interface.",
+        "Resistor value and maximum connection length require device and interconnect analysis."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [333, 334, 335],
+          "support": "Explains source matching, the far-end reflection and the voltage shelf that can affect intermediate receivers."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [80],
+          "support": "Supports reserving a driver-adjacent series-resistor position during placement."
+        }
+      ]
+    },
+    {
+      "id": "si-load-termination-topology",
+      "title": "Reserve the receiving-end termination and branch budget",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["parallel termination", "Thevenin termination", "VTT", "multidrop", "stub", "fanout", "bidirectional"],
+      "principle": "A receiving-end termination works through the impedance presented at the line endpoint, including its connection and reference network. Branches and receiver taps introduce additional reflection paths, so select topology, load order and termination together rather than adding a resistor after routing.",
+      "applies_when": [
+        "An interface requires receiving-end, biased or on-die termination",
+        "Planning shared buses, branched clocks or multiple receivers"
+      ],
+      "required_inputs": [
+        "Interface topology and termination specifications",
+        "All loads, internal terminations and driver directions",
+        "Line impedance, branch delays and receiver input loading",
+        "Termination supply or reference characteristics",
+        "DC loading, power and receiver timing budgets"
+      ],
+      "checks": [
+        "Draw the complete topology, including package connections, test branches and optional loads.",
+        "Place the termination at the intended electrical endpoint and assess any remaining receiver or resistor stub.",
+        "Provide a short reference connection for the termination rather than treating its shunt connection as electrically irrelevant.",
+        "Check effective termination impedance, receiver bias levels and driver current for each active configuration.",
+        "For a biased termination, verify the supply's required source and sink behavior.",
+        "Validate every receiver and switching direction; do not assume one endpoint waveform represents all taps."
+      ],
+      "tradeoffs": [
+        "A shunt termination can suppress endpoint reflections while increasing DC current or reference-supply complexity.",
+        "Reducing branch delay may constrain device placement more strongly than minimizing total net length."
+      ],
+      "failure_modes": [
+        "A well-matched resistor is connected through an electrically significant stub.",
+        "Parallel on-die and external terminations overload the driver.",
+        "A termination rail cannot support the required changing current."
+      ],
+      "limits": [
+        "No single branching pattern or termination network is correct for every interface.",
+        "The cited i.MX application note does not define limits for unrelated processors or modern memory standards."
+      ],
+      "references": [
+        {
+          "source_id": "freescale-an2536",
+          "pdf_pages": [12, 13],
+          "support": "Describes load-adjacent termination, divider loading and the source/sink requirement of biased termination."
+        },
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [338, 343],
+          "support": "Explains reflections from branches and the waveform impact of extra capacitive loading along a line."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [80],
+          "support": "Relates receiving-end resistor placement to the length of its connecting stub."
+        }
+      ]
+    },
+    {
+      "id": "si-differential-geometry",
+      "title": "Preserve differential symmetry and the reference environment",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["differential pair", "differential impedance", "mode conversion", "common mode", "AC coupling", "pair symmetry"],
+      "principle": "A differential pair is a coupled structure whose behavior depends on both traces and their surroundings. Unequal pads, vias or reference conditions can create imbalance even when the reported lengths match, and a pair routed over a plane generally still depends on that plane for its return behavior.",
+      "applies_when": [
+        "Placing differential-interface devices, connectors or coupling components",
+        "Planning pair escape, layer changes or local spacing changes"
+      ],
+      "required_inputs": [
+        "Interface impedance, skew and common-mode requirements",
+        "Stackup, copper geometry and dielectric properties",
+        "Connector and package pin mapping",
+        "Required AC-coupling or protection components",
+        "Permitted via structures and their return connections"
+      ],
+      "checks": [
+        "Derive pair width and spacing for the actual stackup rather than copying a nominal impedance geometry.",
+        "Orient endpoints and inline components to give both legs comparable pads, neckdowns and vias.",
+        "If coupling capacitors are required, provide symmetric launches without choosing their location or value independently of the interface specification.",
+        "Inspect obstacles and copper boundaries beside and beneath each leg, including local uncoupled sections.",
+        "Review the reference path as well as the P/N routes; pair coupling is not permission to cross a plane gap."
+      ],
+      "tradeoffs": [
+        "Tighter pair spacing changes impedance and escape options; it is not a substitute for symmetry.",
+        "Symmetric component launches may need more space than separate shortest-path routes."
+      ],
+      "failure_modes": [
+        "A test pad or protection footprint loads only one leg.",
+        "The two traces take different via or reference environments despite equal total length."
+      ],
+      "limits": [
+        "Equal lengths and nominal differential impedance do not prove an acceptable eye diagram or common-mode emissions.",
+        "Exact pair geometry requires the selected stackup and interface constraints."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [525, 531, 558, 560],
+          "support": "Establishes plane participation in differential return current and distortion or mode conversion caused by asymmetry."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [32, 33, 34],
+          "support": "Supports coordinated pair geometry, symmetric component placement and comparable via transitions."
+        }
+      ]
+    },
+    {
+      "id": "si-reference-layer-transitions",
+      "title": "Give each layer transition a return-current transition",
+      "topics": ["routing-readiness", "return-paths"],
+      "tags": ["layer change", "reference transition", "stitching via", "ground via", "plane coupling", "return inductance"],
+      "principle": "A signal via changes the forward path but does not by itself connect the reference conductors used before and after the transition. Same-net references can be joined locally with a suitable return via; references on different nets require an approved coupling arrangement, not a direct short.",
+      "applies_when": [
+        "A critical route changes layer or adjacent reference plane",
+        "A connector or package escape transfers a signal between reference environments"
+      ],
+      "required_inputs": [
+        "Signal layers and adjacent reference nets before and after each transition",
+        "Via and antipad geometry",
+        "Available reference vias and plane connectivity",
+        "Signal bandwidth and allowed transition discontinuity",
+        "Approved isolation and cross-net coupling requirements"
+      ],
+      "checks": [
+        "Map the actual reference change instead of assuming every layer change has the same return requirements.",
+        "For same-net plane changes, reserve a nearby return via connected to both relevant planes.",
+        "Inspect the return-via path for plane voids or narrow connections that defeat local continuity.",
+        "For differential transitions, evaluate both legs and the symmetry of the surrounding return structure.",
+        "For different reference nets, prefer a topology avoiding the transition or analyze the approved capacitive path and its connection inductance.",
+        "Reject any proposed connection that shorts distinct supplies or bridges an isolation boundary."
+      ],
+      "tradeoffs": [
+        "Return vias consume escape area but can reduce the electrical cost of necessary layer changes.",
+        "Avoiding a reference change may require another routing layer or a longer route."
+      ],
+      "failure_modes": [
+        "Return current must travel to a distant plane connection.",
+        "A nominal stitching via connects to only one of the required reference layers."
+      ],
+      "limits": [
+        "A fixed via spacing or capacitor value cannot guarantee a low-impedance transition over the signal bandwidth.",
+        "Complex reference transitions need an electromagnetic or validated interconnect model; visible vias alone are insufficient."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [274, 275, 277, 278, 279],
+          "support": "Explains reference-plane coupling and the different return mechanisms for same-potential and different-potential planes."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [32, 38],
+          "support": "Identifies local reference-plane connections as part of differential and single-ended layer changes."
+        }
+      ]
+    },
+    {
+      "id": "si-crosstalk-corridors",
+      "title": "Allocate isolation from coupling risk",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["crosstalk", "NEXT", "FEXT", "aggressor", "victim", "parallel routing", "guard trace"],
+      "principle": "Crosstalk depends on the coupled signal-return structures, edge behavior and the receiver's tolerance, not just a clearance measurement. Placement should reduce unnecessary shared routing length and reserve separation or shielding layers where an aggressor could disturb a sensitive victim.",
+      "applies_when": [
+        "Wide buses, clocks or serial channels share a constrained routing region",
+        "Low-noise or timing-sensitive nets pass near switching signals"
+      ],
+      "required_inputs": [
+        "Aggressor edge behavior and simultaneous-switching scenarios",
+        "Victim noise and timing margins",
+        "Stackup, trace geometry and reference spacing",
+        "Estimated parallel lengths, layer adjacency and termination states"
+      ],
+      "checks": [
+        "Identify likely aggressor-victim pairs before assigning routing channels.",
+        "Estimate coupled length as well as minimum separation, including package escape and connector approaches.",
+        "Use spacing appropriate to the stackup and noise budget instead of treating a trace-width multiple as universal.",
+        "Where strong isolation is required, consider an intervening reference plane rather than merely moving traces onto adjacent signal layers.",
+        "Check return discontinuities and shared reference connections that can introduce coupling beyond the parallel traces.",
+        "Treat a guard trace as a structure needing analysis and effective connections, not as automatic shielding."
+      ],
+      "tradeoffs": [
+        "Increasing separation or adding a shielding plane reduces routing density and may increase board cost.",
+        "Shortening coupled length may require placement changes or extra routing distance elsewhere."
+      ],
+      "failure_modes": [
+        "Spacing passes a generic rule while long parallel runs still exceed the victim's margin.",
+        "An ineffective guard or shared return connection introduces a new coupling path."
+      ],
+      "limits": [
+        "Geometry checks cannot quantify near-end or far-end noise without signal and interconnect information.",
+        "Neither spacing nor shielding eliminates all coupling mechanisms."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [502, 503],
+          "support": "Relates coupling to signal-return geometry, separation, coupled length, layer choice and suitable analysis methods."
+        }
+      ]
+    },
+    {
+      "id": "si-clock-sensitive-regions",
+      "title": "Separate oscillator loops from clock distribution",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["crystal", "oscillator", "clock", "jitter", "reset", "analog reference", "sensitive node"],
+      "principle": "A crystal network can be a sensitive local circuit, while a buffered clock route can be both a noise source and a timing-sensitive path. Keep the local oscillator connections compact and protected, then plan clock distribution with its own return, termination and load requirements.",
+      "applies_when": [
+        "A board includes crystal pins, clock generators or low-jitter clock inputs",
+        "Clocks, resets or precision references coexist with switching buses"
+      ],
+      "required_inputs": [
+        "Oscillator and clock-device layout requirements",
+        "Crystal or resonator circuit and permitted parasitic loading",
+        "Clock loads, topology, edge times and jitter budget",
+        "Nearby aggressor routes and sensitive analog regions",
+        "Reference-plane structure and permitted test access"
+      ],
+      "checks": [
+        "Distinguish crystal pins, buffered clock outputs, reset inputs and analog references rather than assigning one generic clock rule.",
+        "Place crystal-network components relative to the oscillator pins as required by the device guidance.",
+        "Reserve a local routing exclusion region so unrelated fast signals do not run through the oscillator circuit.",
+        "Plan buffered clocks away from precision inputs while maintaining a continuous reference and the specified topology.",
+        "Review test pads and probe loading before adding access to a sensitive oscillator or clock node.",
+        "Do not create a ground moat or add shielding that conflicts with the oscillator vendor's reference requirements."
+      ],
+      "tradeoffs": [
+        "Protecting the oscillator region uses placement area but avoids later clock and analog-routing conflicts.",
+        "Easy probing can increase parasitic loading and must be reconciled with the operating circuit."
+      ],
+      "failure_modes": [
+        "A fast bus couples into crystal connections even though the crystal's nominal frequency is low.",
+        "A clock route passes through a precision reference region and couples switching noise."
+      ],
+      "limits": [
+        "Compact placement alone cannot establish oscillator startup margin, frequency accuracy or jitter.",
+        "The cited i.MX crystal example does not set universal frequencies, keepout distances or ground patterns."
+      ],
+      "references": [
+        {
+          "source_id": "freescale-an2536",
+          "pdf_pages": [15],
+          "support": "Provides a device-specific example of short crystal connections and exclusion of nearby high-speed routing."
+        },
+        {
+          "source_id": "orcad-forty-tips",
+          "pdf_pages": [63, 64],
+          "support": "Identifies clock, reset and analog-reference susceptibility and the importance of separation and reference continuity."
+        }
+      ]
+    },
+    {
+      "id": "si-mixed-signal-boundaries",
+      "title": "Partition mixed-signal traffic before splitting copper",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["mixed signal", "ADC", "DAC", "AGND", "DGND", "functional partition", "analog front end"],
+      "principle": "Analog and digital labels do not by themselves require separate ground planes. For a shared-reference design, functional placement and route boundaries can keep digital traffic out of sensitive analog regions without creating a physical gap in the return conductor.",
+      "applies_when": [
+        "Placing converters, analog front ends or sensors beside digital processing",
+        "Reviewing proposed AGND/DGND splits or common-ground connections"
+      ],
+      "required_inputs": [
+        "Device-specific ground and exposed-pad connection requirements",
+        "Analog signal and reference paths with their noise budgets",
+        "Digital traffic and expected return-current regions",
+        "Plane connectivity and any mandated isolation boundaries",
+        "Pin orientation and planned inter-domain connections"
+      ],
+      "checks": [
+        "Use the converter pin arrangement to orient analog connections toward the analog region and digital connections toward digital processing.",
+        "Keep high-edge-rate routing and its return corridor out of precision input and reference regions.",
+        "Evaluate a continuous shared reference with placement-defined regions before introducing a ground slot.",
+        "At each necessary domain crossing, identify the reference path and the device-approved connection scheme.",
+        "Do not infer a ferrite, zero-ohm link or single-point connection solely from schematic ground names.",
+        "Preserve genuine isolation barriers and document any device requirement that overrides the shared-plane approach."
+      ],
+      "tradeoffs": [
+        "Functional separation may increase some connection lengths but reduce unwanted overlap with sensitive circuitry.",
+        "A solid shared plane simplifies return continuity but still requires careful traffic placement."
+      ],
+      "failure_modes": [
+        "A digital trace crosses a plane split introduced to improve analog isolation.",
+        "A sensitive reference shares a narrow return region with switching traffic."
+      ],
+      "limits": [
+        "This is not a universal ground-connection prescription for every converter or isolated system.",
+        "Visual partitioning cannot establish analog noise, converter accuracy or EMC performance."
+      ],
+      "references": [
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [82, 100, 101],
+          "support": "Contrasts overlapping return regions, physical plane splits and placement-defined analog/digital regions on a shared ground."
+        },
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [273],
+          "support": "Explains why a reference gap can disrupt a signal-return loop instead of providing useful isolation."
+        }
+      ]
+    },
+    {
+      "id": "si-package-escape-readiness",
+      "title": "Prove package escape before closing surrounding placement",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["BGA", "fine pitch", "QFN", "LGA", "fanout", "escape routing", "microvia", "antipad"],
+      "principle": "A package that fits geometrically may still have trapped pins or unusable signal-reference paths. Reserve surrounding placement only after a representative escape study shows that the pin groups can reach their assigned layers with the required geometry, return continuity and timing allowance.",
+      "applies_when": [
+        "Placing dense BGA, LGA, QFN or other fine-pitch packages",
+        "Changing package pitch, layer count, via technology or neighboring placement"
+      ],
+      "required_inputs": [
+        "Exact package land pattern, pin map and device escape guidance",
+        "Selected stackup and usable routing layers",
+        "Approved trace, spacing, via and antipad geometries",
+        "Critical net groups, pair mapping and timing budgets",
+        "Support-component locations and connection priorities"
+      ],
+      "checks": [
+        "Sketch or inspect escape paths for outer and inner pin groups, not only the easiest edge pins.",
+        "Reserve via and routing corridors before filling the package perimeter with neighboring parts.",
+        "Check that the proposed via structure reaches the required layers without relying on unavailable fabrication processes.",
+        "Overlay escape antipads on reference planes to find merged voids and missing return connections.",
+        "Verify that differential and timed groups retain feasible geometry and delay allowance through the escape.",
+        "Reconcile escape space with support-component connections rather than treating either as leftover space."
+      ],
+      "tradeoffs": [
+        "More routing layers or advanced vias can improve escape options but introduce process and cost constraints.",
+        "Wider escape corridors may require a less compact placement."
+      ],
+      "failure_modes": [
+        "Surrounding passives block access to inner package rows.",
+        "A fanout is routable but cuts the reference plane into poorly connected regions."
+      ],
+      "limits": [
+        "No package-pitch threshold alone determines the necessary via technology or layer count.",
+        "A planning review does not prove complete routability or enable initial placement, fanout generation or routing in the fixture backend."
+      ],
+      "references": [
+        {
+          "source_id": "orcad-forty-tips",
+          "pdf_pages": [21, 22],
+          "support": "Supports early fanout study, reserved escape corridors and checking the chosen layer and via process."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [38],
+          "support": "Identifies dense via-clearance patterns as a possible interruption to reference-plane continuity."
+        }
+      ]
+    },
+    {
+      "id": "si-delay-budget-before-length-tuning",
+      "title": "Budget delay before adding length compensation",
+      "topics": ["placement", "routing-readiness"],
+      "tags": ["length matching", "skew", "timing budget", "source synchronous", "differential skew", "serpentine", "propagation delay"],
+      "principle": "Length is a useful delay proxy only when propagation environments are comparable. Set the required arrival-time relationship first, then account for package paths, layer-dependent velocity and routing transitions before reserving space for compensation.",
+      "applies_when": [
+        "Planning differential pairs or source-synchronous data and strobe groups",
+        "Comparing routes on different layers or through different packages"
+      ],
+      "required_inputs": [
+        "Interface-specific skew, setup, hold and total-delay limits",
+        "Package and connector delay data where relevant",
+        "Stackup propagation characteristics for permitted layers",
+        "Expected pin-to-pin routes, transitions and topology",
+        "CAD length-report conventions and model assumptions"
+      ],
+      "checks": [
+        "Identify which nets must match each other and which need a deliberate offset; do not match unrelated groups.",
+        "Translate timing allowances into routing constraints using the actual propagation environment.",
+        "Check whether reported lengths include vias, package paths and component connections needed by the timing model.",
+        "Orient parts to reduce initial mismatch before allocating additional route length.",
+        "For differential pairs, inspect local asymmetry and unequal transitions even when endpoint lengths agree.",
+        "Reserve compensation space without assuming tightly packed serpentine length produces the same delay as isolated straight routing."
+      ],
+      "tradeoffs": [
+        "Length tuning can consume area and increase coupling or loss.",
+        "Keeping a group in one propagation environment may simplify timing but restrict escape and routing choices."
+      ],
+      "failure_modes": [
+        "Equal geometric lengths have unequal delay because their layer or package environments differ.",
+        "Unnecessary tuning adds coupled routing while leaving the real timing offset uncorrected."
+      ],
+      "limits": [
+        "A length-match report does not establish setup/hold closure or differential signal quality.",
+        "No universal mismatch allowance applies across interfaces or edge rates."
+      ],
+      "references": [
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [34, 35, 36],
+          "support": "Relates length matching to propagation speed and highlights local mismatch that total-length checks can miss."
+        },
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [558, 559, 560],
+          "support": "Explains timing distortion and common-signal generation from differential skew and asymmetry."
+        },
+        {
+          "source_id": "freescale-an2536",
+          "pdf_pages": [15],
+          "support": "Illustrates why interconnect delay allowances depend on the attached devices and their timing requirements."
+        }
+      ]
+    },
+    {
+      "id": "si-discontinuity-budget",
+      "title": "Review pads, branches and unused via barrels as channel elements",
+      "topics": ["placement", "routing-readiness", "return-paths"],
+      "tags": ["via stub", "backdrill", "test pad", "connector launch", "neckdown", "insertion loss", "channel model", "reflection"],
+      "principle": "A channel includes pads, neckdowns, connectors, test access and the unused portions of vias, not just the visible trace between devices. Reserve routing structures that keep these discontinuities within the channel budget, and evaluate their combined effect rather than assuming every short feature is harmless.",
+      "applies_when": [
+        "Planning high-bandwidth channels through connectors or dense escapes",
+        "Adding test access, optional branches or layer transitions"
+      ],
+      "required_inputs": [
+        "Signal bandwidth, edge behavior and channel acceptance criteria",
+        "Pin-to-pin topology including optional and test connections",
+        "Via spans, unused barrel lengths, pads and antipads",
+        "Connector, package and interconnect models",
+        "Available approved stub-removal or alternative-via processes"
+      ],
+      "checks": [
+        "Inventory signal-path discontinuities and unused branches before finalizing placement.",
+        "Calculate unused via barrel from the selected entry and exit layers rather than from the visible routed segment.",
+        "Review pads, test points and neckdowns for added loading and unequal treatment of differential legs.",
+        "Compare alternatives such as a different layer assignment, via structure or approved backdrill when a stub threatens channel bandwidth.",
+        "Carry the selected structures into the channel model and assess reflections, loss and mode conversion together.",
+        "Recheck the reference path whenever changing a launch, antipad or via to improve the signal conductor."
+      ],
+      "tradeoffs": [
+        "Removing stubs may improve the channel while adding fabrication complexity.",
+        "Test access and flexible population options can conflict with a simple, low-discontinuity path."
+      ],
+      "failure_modes": [
+        "An unused barrel creates a resonance within the useful channel spectrum.",
+        "Several individually small discontinuities combine into unacceptable receiver distortion."
+      ],
+      "limits": [
+        "A via count, visual inspection or DRC result cannot establish channel bandwidth or electrical compliance.",
+        "This review does not replace channel simulation, suitable measurements or process confirmation."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-si-pi-second",
+          "pdf_pages": [330, 335, 338, 343, 560, 631],
+          "support": "Covers neckdowns, branches, added capacitive loads, asymmetric loading and resonant effects of unused via stubs."
+        }
+      ]
+    }
+  ]
+}

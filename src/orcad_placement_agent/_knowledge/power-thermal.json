@@ -1,0 +1,678 @@
+{
+  "schema_version": 1,
+  "pack_id": "power-thermal",
+  "title": "Power integrity and thermal placement",
+  "summary": "Original, conditional review guidance for capacitor roles, mounted PDN behavior, converter current paths and board-level heat removal. Device data and the actual stackup govern numerical decisions; these cards do not certify or execute a layout.",
+  "sources": [
+    {
+      "id": "bogatin-pi",
+      "title": "Signal and Power Integrity - Simplified",
+      "authors": ["Eric Bogatin"],
+      "edition": "Second edition",
+      "year": 2010,
+      "local_filename": "70d823f6-f7f1-461a-9fc5-eed2d9acf535.pdf",
+      "identity_note": "Title and author verified on PDF p.4; p.5 identifies the second edition, copyright 2010 and first printing July 2009. Numerical PDN examples and historical component availability are not universal design rules."
+    },
+    {
+      "id": "toradex-layout",
+      "title": "Layout Design Guide",
+      "authors": ["Toradex AG"],
+      "edition": "Version 1.0",
+      "year": 2015,
+      "local_filename": "76d8f6e1-a049-4a5e-97ca-e528b4233269.pdf",
+      "identity_note": "PDF pp.1-2 verify the title, organizational issuer and 14 April 2015 initial release. PDF metadata says Carrier Board Design Guide, but the visible title differs. Module-specific advice and example capacitor/via rules are not adopted universally."
+    },
+    {
+      "id": "dostal-power-layout",
+      "title": "PCB Board Layout Optimization",
+      "authors": ["Frederik Dostal"],
+      "edition": null,
+      "year": null,
+      "local_filename": "94f60438-40c9-49eb-ba6a-ba10e801a598.pdf",
+      "identity_note": "PDF p.1 verifies title and presenter and displays analog.com. Edition and year were not established. The slide deck is diagram-heavy; extracted text supports the stated concepts, not an independent verification of illustrated wiring."
+    },
+    {
+      "id": "freescale-an3962",
+      "title": "PCB Layout Design Guide for Analog Applications",
+      "authors": ["Edward Lee", "Rafael Garcia Mora"],
+      "edition": "Revision 2.0",
+      "year": 2010,
+      "local_filename": "a19ae4ed-46d0-42be-bc4b-97073f2a0e85.pdf",
+      "identity_note": "PDF p.1 verifies title, authors, Freescale AN3962 and revision dated August 2010. Ground-joining examples depend on topology. Legacy spacing tables, extracted numerical units and illustrative thermal-via counts are not carried into these cards."
+    },
+    {
+      "id": "edwards-thermal",
+      "title": "Printed Circuits Handbook: Chapter 17, PCB Design for Thermal Performance",
+      "authors": ["Darvin Edwards"],
+      "edition": "Sixth edition",
+      "year": 2008,
+      "local_filename": "3152f43c-f2b3-4fa6-b4a3-5dbc454f0ad6.pdf",
+      "identity_note": "PDF p.357 identifies chapter author Darvin Edwards. PDF pp.3-4 verify copyright 2008, sixth edition and editor-in-chief Clyde F. Coombs, Jr.; the listed author is the consulted chapter author, not sole author of the handbook."
+    },
+    {
+      "id": "orcad-tips",
+      "title": "40 PCB Design Tips Every Designer Should Know",
+      "authors": [],
+      "edition": null,
+      "year": null,
+      "local_filename": "40 PCB Design Tips Every Designer Should Know.pdf",
+      "identity_note": "Title verified on PDF p.1. Personal author, edition and year were not established. This general checklist is secondary evidence; its LDO/switching-loop conflation, universal-looking numbers and claims of assured compliance are not adopted."
+    }
+  ],
+  "cards": [
+    {
+      "id": "pt-identify-capacitor-function",
+      "title": "Identify capacitor function before ranking placement",
+      "topics": ["placement", "decoupling", "power-loops"],
+      "tags": ["capacitor role identification", "bypass versus bulk", "bootstrap capacitor", "regulator output stability", "schematic pin mapping"],
+      "principle": "A capacitor's job comes from its circuit connections and the current it must exchange, not its reference designator, nominal value or proximity to an IC. Separate supply bypass, bulk storage, converter input/output, bootstrap and compensation functions before deciding which pins and return nodes deserve the shortest connection.",
+      "applies_when": [
+        "A placement review includes capacitors with uncertain circuit roles.",
+        "Several capacitors appear to serve the same rail."
+      ],
+      "required_inputs": [
+        "Schematic or netlist including both capacitor terminals and connected IC pin functions.",
+        "Exact IC variant, pinout and manufacturer capacitor requirements.",
+        "Capacitor part numbers, package sizes, polarity and operating voltage.",
+        "Load transients and regulator topology or operating modes."
+      ],
+      "checks": [
+        "Trace both terminals of each capacitor and record its role, serviced pins and intended return node.",
+        "Distinguish an IC supply bypass from a floating bootstrap or charge-pump capacitor; do not infer ground from a nearby pad.",
+        "Mark output capacitors that participate in regulator stability and preserve their specified connection and ESR constraints.",
+        "Rank placement by the required current path and mounting geometry after confirming the role.",
+        "Leave ambiguous assignments unresolved rather than moving a capacitor on its value alone."
+      ],
+      "tradeoffs": [
+        "One capacitor may support more than one nearby pin, but shared connection impedance must be evaluated.",
+        "A part serving both storage and filtering roles must satisfy both duties; simplifying labels does not remove either requirement."
+      ],
+      "failure_modes": [
+        "A bootstrap or compensation component is treated as a generic rail bypass.",
+        "An attractive short distance hides a connection to the wrong supply or return pin."
+      ],
+      "limits": [
+        "Names and visual proximity cannot establish electrical function; the schematic and device documentation are authoritative.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "toradex-layout",
+          "pdf_pages": [15],
+          "support": "Explains bypass capacitors as local providers of transient load current and discusses supply and return connections."
+        },
+        {
+          "source_id": "orcad-tips",
+          "pdf_pages": [38],
+          "support": "Calls for identifying regulator pin functions and consulting device-specific layout guidance before arranging associated components."
+        }
+      ]
+    },
+    {
+      "id": "pt-minimize-mounted-decoupling-loop",
+      "title": "Judge decoupling by the complete mounted loop",
+      "topics": ["placement", "routing-readiness", "decoupling", "return-paths"],
+      "tags": ["mounting inductance", "capacitor ESL", "power ground via pair", "pad to via connection", "decoupling loop area"],
+      "principle": "The useful high-frequency connection includes both capacitor terminals, vias, planes and package access; a short center-to-center distance is only a proxy. Once inductance dominates, increasing nominal capacitance does not repair an unnecessarily long or poorly coupled supply-and-return loop.",
+      "applies_when": [
+        "Comparing capacitor orientations or board sides near an IC.",
+        "A rail has adequate nominal capacitance but poor fast-transient behavior."
+      ],
+      "required_inputs": [
+        "Confirmed capacitor role and associated power/return pins.",
+        "Stackup with power/return layer depths and dielectric spacing.",
+        "Pad, via, plane and package connection geometry.",
+        "Relevant transient spectrum and allowed rail disturbance.",
+        "Mounted capacitor model or manufacturer parasitic data."
+      ],
+      "checks": [
+        "Trace the entire load-to-capacitor-and-back path, including every layer transition.",
+        "Compare orientations by pad escape and supply/return coupling, not by component-body distance alone.",
+        "Check for thin necks, long pad-to-via stubs and plane openings that force a detour.",
+        "Evaluate top-side and underside options using actual via depth and package access.",
+        "If parallel capacitors share a narrow connection, include that shared inductance instead of assuming ideal division."
+      ],
+      "tradeoffs": [
+        "Shorter mounting paths can compete with assembly access and IC escape space.",
+        "Adding vias may help, but connection geometry and shared paths govern the improvement."
+      ],
+      "failure_modes": [
+        "A nearby capacitor is electrically remote because its return route is long.",
+        "More capacitance is added while the dominant mounting bottleneck remains unchanged."
+      ],
+      "limits": [
+        "There is no universal best board side, distance or via count; evaluate the complete interconnect.",
+        "A lumped estimate may miss distributed plane and package effects at higher frequencies.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-pi",
+          "pdf_pages": [210, 211],
+          "support": "Relates high-frequency decoupling impedance to the inductance of the mounted current path rather than capacitance alone."
+        },
+        {
+          "source_id": "dostal-power-layout",
+          "pdf_pages": [23, 24],
+          "support": "Identifies long thin capacitor connections as an inductive limitation and discusses pad-adjacent vias and loop geometry."
+        }
+      ]
+    },
+    {
+      "id": "pt-coordinate-bulk-and-local-pdn",
+      "title": "Allocate bulk and local capacitors by response time",
+      "topics": ["placement", "decoupling", "return-paths"],
+      "tags": ["PDN target impedance", "bulk energy storage", "load transient", "regulator bandwidth", "inrush current", "effective capacitance"],
+      "principle": "A regulator, board capacitors and package decoupling contribute over overlapping response ranges set by their impedances and interconnects. Place storage where it can support the relevant load event, while preserving local low-inductance paths for faster events; a large remote capacitor is not a substitute for those paths.",
+      "applies_when": [
+        "Choosing bulk-capacitor locations between a regulator and distributed loads.",
+        "A rail experiences droop, startup trips or interaction between load groups."
+      ],
+      "required_inputs": [
+        "Rail voltage tolerance budget and expected load-step magnitude, duration and edge rate.",
+        "Regulator transient response, output-capacitance constraints and startup limits.",
+        "Capacitor effective capacitance, ESR, ESL and ripple-current ratings at operating conditions.",
+        "Power and return interconnect geometry from source to each load.",
+        "Package or module decoupling information where available."
+      ],
+      "checks": [
+        "Assign disturbance budget to DC distribution drop, regulator error and transient effects before selecting a PDN target.",
+        "Model or measure regulator-to-capacitor handoff using the actual regulator response, not a fixed generic bandwidth.",
+        "Check that bulk storage reaches the load without a high-impedance connector, long neck or return bottleneck.",
+        "Use voltage-, temperature- and tolerance-adjusted capacitor data rather than summing nameplate values.",
+        "Recheck startup charging, current limiting and regulator stability after changing the capacitor bank."
+      ],
+      "tradeoffs": [
+        "Moving bulk storage toward a load can improve local support while increasing startup burden or changing control-loop behavior.",
+        "Rail segmentation may reduce interaction between loads but adds impedance that must be included in the model."
+      ],
+      "failure_modes": [
+        "Bulk capacitance is adequate on paper but inaccessible during the required transient.",
+        "An enlarged capacitor bank causes startup current limiting or an unverified regulator response."
+      ],
+      "limits": [
+        "No universal capacitance or frequency boundary separates bulk from high-frequency decoupling.",
+        "Board capacitors cannot overcome every package-level inductance or on-die supply limitation.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-pi",
+          "pdf_pages": [663, 664],
+          "support": "Uses regulator impedance and bulk-capacitor interaction to motivate modeling the low-frequency PDN response."
+        },
+        {
+          "source_id": "toradex-layout",
+          "pdf_pages": [15, 16],
+          "support": "Connects local bypassing to transient supply paths and warns that charging rail capacitance can cause startup disturbances."
+        }
+      ]
+    },
+    {
+      "id": "pt-check-capacitor-network-resonance",
+      "title": "Validate capacitor mixtures and distribution as a network",
+      "topics": ["placement", "decoupling", "return-paths"],
+      "tags": ["PDN antiresonance", "parallel resonance", "mixed capacitor values", "capacitor ESR damping", "plane spreading inductance"],
+      "principle": "Different capacitor values are neither inherently better nor inherently worse than repeated values: their mounted impedances interact with the regulator, planes and package. Judge a bank by its impedance peaks across the relevant band, and do not cluster all capacitors tightly if shared plane access becomes the limiting inductance.",
+      "applies_when": [
+        "Adding a smaller capacitor to an existing rail bank.",
+        "Choosing between repeated values, a value mixture or alternative spatial distributions.",
+        "A simulated or measured PDN has narrow impedance peaks."
+      ],
+      "required_inputs": [
+        "Rail target impedance, frequency range and load excitation information.",
+        "Capacitor models including ESR, ESL and capacitance variation.",
+        "Stackup, plane geometry, capacitor positions and package power/return access.",
+        "Regulator and existing bulk-capacitor models."
+      ],
+      "checks": [
+        "Compare complete-bank impedance for proposed mixtures and repeated-value alternatives.",
+        "Include mounted connection and common-path inductance; do not compare ideal capacitors alone.",
+        "Sweep component tolerances and damping to find worst-case peaks near relevant excitation.",
+        "Check whether moving capacitors changes plane spreading inductance or only cosmetic spacing.",
+        "Where shared spreading inductance dominates, evaluate distributed package access or underside options rather than one dense cluster.",
+        "Validate critical peaks with an appropriate measurement or higher-fidelity model before treating the bank as sufficient."
+      ],
+      "tradeoffs": [
+        "Additional values may improve a particular impedance profile but complicate inventory and tolerance analysis.",
+        "Lower ESR reduces some losses yet may leave resonances less damped.",
+        "Distributed placement can improve access while consuming more local board area."
+      ],
+      "failure_modes": [
+        "A familiar capacitor-value recipe introduces an unexamined impedance peak.",
+        "Ideal parallel scaling hides a shared via or plane bottleneck."
+      ],
+      "limits": [
+        "No fixed capacitor mixture, equal-value rule or smallest-capacitor-first rule is universally valid.",
+        "Large or complicated plane/package structures may require distributed or field-solver analysis.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "bogatin-pi",
+          "pdf_pages": [720, 721, 723, 724, 725],
+          "support": "Shows that equal-value and mixed-value approaches apply under different PDN conditions and evaluates impedance using capacitor parasitics."
+        },
+        {
+          "source_id": "bogatin-pi",
+          "pdf_pages": [734, 735, 738, 739],
+          "support": "Explains when spatial distribution matters because plane spreading and package-access inductance limit the capacitor network."
+        }
+      ]
+    },
+    {
+      "id": "pt-derive-topology-commutation-loops",
+      "title": "Derive each converter's changing-current loop",
+      "topics": ["placement", "routing-readiness", "power-loops", "return-paths"],
+      "tags": ["high di dt loop", "buck input loop", "boost output loop", "switching state comparison", "commutation loop", "LDO distinction"],
+      "principle": "The critical commutation loop is found by comparing current paths immediately before and after a switch transition, not by enclosing every power component in one generic loop. Conventional buck and boost stages concentrate pulsed current in different branches; a linear LDO has no intrinsic switch-commutation loop, although its load transients and stability requirements still matter.",
+      "applies_when": [
+        "Reviewing a switching regulator, discrete power stage or changed converter topology.",
+        "A generic placement template is being reused for a different regulator."
+      ],
+      "required_inputs": [
+        "Complete power-stage schematic, switch functions and exact device pinout.",
+        "Topology and operating modes, including synchronous or diode rectification.",
+        "Manufacturer layout guidance and relevant reference design.",
+        "Input/output ripple, current waveform and transition information.",
+        "Proposed component positions, stackup and supply/return connections."
+      ],
+      "checks": [
+        "Sketch or annotate the conducting paths for each switching state and mark branches whose current changes abruptly.",
+        "For a conventional buck, examine commutation between the local input capacitor and switching devices; for a boost, examine the output-capacitor and rectifier/switch branches.",
+        "Place the parts closing the identified loop so that forward and return paths can remain compact and closely coupled.",
+        "Check package pin access and via transitions before assuming a visually tight component cluster makes a small electrical loop.",
+        "Repeat the state comparison for burst, discontinuous, reverse-current or additional switching modes that the design uses."
+      ],
+      "tradeoffs": [
+        "A compact commutation loop can conflict with thermal spreading and component access.",
+        "Integrated power modules may internalize part of the loop, shifting the critical external connections."
+      ],
+      "failure_modes": [
+        "Buck input-capacitor placement advice is transferred unchanged to a boost or other topology.",
+        "An LDO is assigned a fictitious switch node while its real output-capacitor constraints are missed."
+      ],
+      "limits": [
+        "Topology examples are starting points; multiphase, isolated and unconventional converters require their own state analysis.",
+        "Slide diagrams were not independently reconstructed; the actual circuit and manufacturer guidance must settle detailed wiring.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "dostal-power-layout",
+          "pdf_pages": [12, 15, 18],
+          "support": "Introduces buck switching transitions, inductive voltage disturbance and identification of hot-loop paths from on/off current states."
+        },
+        {
+          "source_id": "freescale-an3962",
+          "pdf_pages": [11, 12],
+          "support": "Discusses boost-stage current paths and noise caused by current flowing through finite shared return impedance."
+        },
+        {
+          "source_id": "toradex-layout",
+          "pdf_pages": [16],
+          "support": "Directs buck and boost layouts to their respective supplier recommendations rather than one universal pattern."
+        }
+      ]
+    },
+    {
+      "id": "pt-contain-switch-node-copper",
+      "title": "Balance switch-node exposure against current and heat",
+      "topics": ["placement", "routing-readiness", "power-loops", "thermal"],
+      "tags": ["switch node copper area", "high dv dt coupling", "SW node keepout", "switching FET thermal pad", "EMI thermal tradeoff"],
+      "principle": "A fast-changing switch-node voltage can couple into nearby conductors even when average load current is modest. Limit unnecessary switch-node extent and victim overlap while preserving the conductor area, heat path and geometry the actual device needs; maximum copper area and minimum copper area are both incomplete objectives.",
+      "applies_when": [
+        "Positioning an inductor, switching FETs or sensitive circuitry around a converter.",
+        "A proposed copper expansion is intended to cool a power stage."
+      ],
+      "required_inputs": [
+        "Schematic identification of all switch-node pads, pins and copper.",
+        "Switching voltage, edge rate, current and loss estimates.",
+        "Device thermal-pad net assignment and reference layout.",
+        "Stackup, nearby sensitive nets and permitted insulation geometry.",
+        "Thermal model or temperature budget and manufacturer current constraints."
+      ],
+      "checks": [
+        "Identify every switch-node-connected feature, including exposed pads and any inner-layer extension.",
+        "Compare candidate inductor and switch positions for a short node connection without unnecessary copper spread.",
+        "Review projected overlap with feedback, sense and other susceptible circuitry on every relevant layer.",
+        "Verify current and thermal adequacy before shrinking copper, and assess coupling before enlarging it.",
+        "Treat copper underneath the node according to the device reference layout and return-path needs rather than adding a universal ground-plane cutout."
+      ],
+      "tradeoffs": [
+        "Spreading copper on a switching potential may improve heat flow but increase capacitive coupling.",
+        "Separation from sensitive circuitry consumes area and must not lengthen the commutation loop excessively."
+      ],
+      "failure_modes": [
+        "A large switching-potential heat spreader overlaps a feedback or sense route.",
+        "Aggressive copper reduction creates a current bottleneck or excessive device temperature."
+      ],
+      "limits": [
+        "No universal switch-node area, clearance or ground exclusion can be specified without device, stackup and insulation data.",
+        "Geometric containment alone does not establish acceptable EMI or temperature.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "dostal-power-layout",
+          "pdf_pages": [3, 4, 6],
+          "support": "Distinguishes fast switching transitions and electric-field coupling from current-related magnetic coupling."
+        },
+        {
+          "source_id": "orcad-tips",
+          "pdf_pages": [38, 50],
+          "support": "Identifies the competing needs to control switch-node extent, protect sensitive circuitry and provide device-appropriate heat spreading."
+        }
+      ]
+    },
+    {
+      "id": "pt-protect-feedback-and-kelvin-sense",
+      "title": "Reserve quiet paths to the actual sensing points",
+      "topics": ["placement", "routing-readiness", "power-loops", "return-paths"],
+      "tags": ["Kelvin sense", "feedback divider placement", "current shunt sensing", "remote voltage sense", "sense return", "switch node isolation"],
+      "principle": "A feedback or sense connection should observe the intended voltage, not the voltage drop in a shared power conductor. Place the divider, amplifier or sense filter so separate sensing paths can reach the specified pickup points without crossing the converter's noisy region; Kelvin sensing applies to both the measured node and its reference.",
+      "applies_when": [
+        "Placing regulator feedback networks or current-sense amplifiers.",
+        "A load or shunt is remote from the controlling device."
+      ],
+      "required_inputs": [
+        "Controller feedback/sense architecture and manufacturer pickup-point instructions.",
+        "Shunt terminal definition or exact output/load reference point.",
+        "Power and return current paths, including switched branches.",
+        "Sense signal magnitude, common-mode range and error budget.",
+        "Proposed divider, filter and amplifier locations."
+      ],
+      "checks": [
+        "Mark the positive and reference pickup points explicitly before judging path length.",
+        "Keep sense takeoffs separate from current-carrying copper until the designated terminal or pickup region.",
+        "Reserve a quiet corridor away from switch-node copper and rapidly changing power paths.",
+        "Locate divider and filter parts according to the controller's input requirements, with a short vulnerable high-impedance segment.",
+        "Check that a shunt footprint exposes the intended Kelvin terminals or sensing regions rather than assuming any pad edge is equivalent.",
+        "For remote sensing, review allowed lead impedance, filtering and open-sense behavior against device documentation."
+      ],
+      "tradeoffs": [
+        "A longer dedicated sense path may be preferable to a short path sharing power current.",
+        "Added filtering can reduce pickup but alter response or stability; it must match the controller design."
+      ],
+      "failure_modes": [
+        "The control loop compensates for an unintended trace drop or switching-ground disturbance.",
+        "A nominally separate sense route rejoins the power path before the intended measurement point."
+      ],
+      "limits": [
+        "The correct pickup point is not universally the output capacitor or controller ground; it depends on the regulator and measurement architecture.",
+        "A text-only Kelvin slide does not establish a particular shunt or inductor-sense wiring arrangement.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "dostal-power-layout",
+          "pdf_pages": [5, 33],
+          "support": "Identifies shared conductive paths as noise sources and explicitly covers Kelvin current sensing; the extracted Kelvin page is sparse."
+        },
+        {
+          "source_id": "freescale-an3962",
+          "pdf_pages": [11, 12],
+          "support": "Explains how different points on current-carrying return copper develop different disturbance voltages."
+        },
+        {
+          "source_id": "orcad-tips",
+          "pdf_pages": [38],
+          "support": "Flags feedback/sense susceptibility near switch nodes and power-current paths."
+        }
+      ]
+    },
+    {
+      "id": "pt-separate-power-return-functions",
+      "title": "Control shared return impedance without arbitrary splits",
+      "topics": ["placement", "routing-readiness", "power-loops", "return-paths"],
+      "tags": ["PGND AGND", "common impedance coupling", "power return placement", "ground joining point", "converter return loop"],
+      "principle": "Ground labels do not guarantee equal potential when pulsed power current flows through finite impedance. Arrange the power stage and quiet control circuitry so their required returns do not share avoidable noisy segments, while preserving the continuous reference and joining arrangement specified for the device.",
+      "applies_when": [
+        "An IC exposes separate power, analog or signal ground pins.",
+        "A converter shares return copper with low-level measurements."
+      ],
+      "required_inputs": [
+        "Device pin functions and manufacturer ground-connection instructions.",
+        "Power-stage switching-state paths and quiet-circuit return requirements.",
+        "Stackup, plane openings, connectors and ground connection geometry.",
+        "Locations of decoupling, sensing and control components."
+      ],
+      "checks": [
+        "Annotate which return segments carry switched current, load current and small-signal reference current.",
+        "Check the complete commutation return through its local capacitor rather than relying on a ground net name.",
+        "Position quiet control components so their references avoid power-current bottlenecks.",
+        "Verify the required AGND/PGND connection against the exact IC documentation; do not choose a star point from a generic example.",
+        "Review any proposed plane split for forced return detours and any copper merge for unwanted shared impedance."
+      ],
+      "tradeoffs": [
+        "Local current-path separation can reduce coupling, but a poorly chosen split may make the overall return path worse.",
+        "A shared plane can provide a low-impedance reference while local geometry still needs to contain power-current circulation."
+      ],
+      "failure_modes": [
+        "An analog reference shares a narrow return neck with the switching stage.",
+        "A copied star-ground or split-ground pattern contradicts the device's intended current paths."
+      ],
+      "limits": [
+        "Neither all grounds separated nor all grounds joined at an arbitrary point is a universal rule.",
+        "Local books contain topology-specific examples; those examples do not override the actual device layout requirements.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "freescale-an3962",
+          "pdf_pages": [11, 12, 13],
+          "support": "Uses shared return impedance and boost-stage examples to explain noise reaching analog circuitry; the joining example is contextual."
+        },
+        {
+          "source_id": "dostal-power-layout",
+          "pdf_pages": [5, 7, 11, 20],
+          "support": "Addresses shared-path noise, field containment, return-path interruptions and distinctions among ground functions."
+        }
+      ]
+    },
+    {
+      "id": "pt-build-operating-thermal-budget",
+      "title": "Budget heat using the real board and enclosure",
+      "topics": ["placement", "thermal"],
+      "tags": ["thermal budget", "junction temperature", "theta JA limitations", "package thermal model", "power dissipation", "enclosure conditions"],
+      "principle": "Thermal placement starts with operating losses and available heat-removal paths, not a component's package size or rated current. Published junction-to-ambient resistance depends on its test board and environment, so use it only with understood conditions rather than treating it as an intrinsic package constant.",
+      "applies_when": [
+        "Choosing locations for regulators, power switches, processors or other significant heat sources.",
+        "A design is moving from an open bench into an enclosure."
+      ],
+      "required_inputs": [
+        "Operating loss estimates across supply, load, duty cycle and relevant modes.",
+        "Device temperature limits and project-specific reliability or derating targets.",
+        "Package thermal model and the conditions behind published thermal metrics.",
+        "Board stackup, copper geometry and neighboring heat sources.",
+        "Enclosure, ambient range, orientation, airflow and mechanical heat paths."
+      ],
+      "checks": [
+        "Estimate losses for credible worst operating combinations rather than using electrical output power as device dissipation.",
+        "Identify whether each package removes heat mainly through its exposed pad, leads, case or multiple paths.",
+        "Compare datasheet test conditions with the actual board before using a thermal-resistance estimate.",
+        "Include mutual heating and local air temperature, not just room ambient.",
+        "Reserve room for required heat sinks, interfaces or chassis contacts before the surrounding placement becomes fixed.",
+        "Plan temperature verification under the intended enclosure and loading conditions."
+      ],
+      "tradeoffs": [
+        "Separating heat sources may reduce mutual heating but lengthen electrically critical connections.",
+        "A more detailed model improves confidence only when its loss, material and boundary-condition inputs are credible."
+      ],
+      "failure_modes": [
+        "A nominal datasheet thermal number masks an enclosure or board that sheds much less heat.",
+        "Each device passes an isolated estimate while neighboring devices raise its actual operating temperature."
+      ],
+      "limits": [
+        "No universal safe temperature or margin is prescribed; device limits and product requirements control.",
+        "Thermal modeling needs validation and does not establish regulatory or reliability compliance by itself.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "edwards-thermal",
+          "pdf_pages": [357, 372, 373],
+          "support": "Explains board-dependent thermal resistance and the need for component models, enclosure geometry and realistic thermal boundary conditions."
+        },
+        {
+          "source_id": "orcad-tips",
+          "pdf_pages": [49, 50],
+          "support": "Treats thermal planning, loss identification, heat-sink space and subsequent measurement as placement-stage concerns."
+        }
+      ]
+    },
+    {
+      "id": "pt-preserve-copper-heat-paths",
+      "title": "Follow heat from the package into useful copper",
+      "topics": ["placement", "thermal", "power-loops"],
+      "tags": ["thermal spreading copper", "exposed pad net", "heat flow bottleneck", "plane continuity", "electrical thermal tradeoff"],
+      "principle": "A copper region helps only if heat can reach it from the package and then leave through the board, enclosure or surrounding air. Review the connected heat path, including necks and plane breaks, rather than counting nearby copper area; electrical isolation and switching-node constraints remain mandatory.",
+      "applies_when": [
+        "Placing a device that relies on PCB copper for cooling.",
+        "Changing pours or moving a power component near a plane boundary."
+      ],
+      "required_inputs": [
+        "Package heat-exit surfaces and electrical net assignment of exposed pads or tabs.",
+        "Copper layer geometry, thickness and connections to the package.",
+        "Power loss, available board area and intended heat rejection mechanism.",
+        "Isolation, creepage and switching-node constraints applicable to the design."
+      ],
+      "checks": [
+        "Trace a continuous thermal path from the package attachment into the intended spreading layers.",
+        "Find narrow necks, antipad barriers and isolation cuts that make a large pour thermally inaccessible.",
+        "Confirm that spreading copper is connected to the correct electrical net, especially for power tabs and exposed pads.",
+        "Check whether the proposed spreading area has a useful path to ambient or a mechanical heat sink.",
+        "Reassess EMI and electrical return behavior when enlarging or relocating copper around the power stage."
+      ],
+      "tradeoffs": [
+        "More continuous copper can improve heat spreading but conflicts with required isolation or high-dv/dt containment.",
+        "A thermally attractive component position may be electrically poor if it stretches a commutation loop."
+      ],
+      "failure_modes": [
+        "A large copper island provides little cooling because a narrow connection limits heat flow.",
+        "A thermal pad is connected to ground despite requiring another electrical potential."
+      ],
+      "limits": [
+        "Nearby unconnected copper is not equivalent to a bonded spreading plane.",
+        "Heat spreading cannot solve a system-level heat rejection limit by itself, and it never authorizes crossing an insulation boundary.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "edwards-thermal",
+          "pdf_pages": [358, 359, 360, 361, 362, 363],
+          "support": "Describes package-to-board conduction, copper spreading planes and the thermal consequences of interruptions in those planes."
+        },
+        {
+          "source_id": "freescale-an3962",
+          "pdf_pages": [14],
+          "support": "Discusses connecting package heat paths to copper planes and using other layers when local spreading area is constrained."
+        }
+      ]
+    },
+    {
+      "id": "pt-design-thermal-vias-for-assembly",
+      "title": "Treat thermal vias as a package-to-plane connection",
+      "topics": ["placement", "thermal", "manufacturing"],
+      "tags": ["thermal via array", "exposed pad solder wicking", "via plating thickness", "solid plane connection", "thermal relief tradeoff"],
+      "principle": "Thermal-via performance depends on the connection from the soldered package land through plated barrels into useful spreading copper, not the hole count alone. Coordinate this path with fabrication and assembly so improved conduction does not come at the cost of an inadequately soldered thermal pad.",
+      "applies_when": [
+        "A power package uses an exposed pad or dedicated thermal land.",
+        "Evaluating via-in-pad, additional thermal vias or plane-connection changes."
+      ],
+      "required_inputs": [
+        "Package land pattern, thermal-pad net and manufacturer thermal guidance.",
+        "Via construction, drill/plating tolerances and relevant layer depths.",
+        "Connected spreading-plane geometry and expected device losses.",
+        "Assembly guidance for paste, solder voiding and via filling or capping.",
+        "Fabricator capabilities and accepted inspection criteria."
+      ],
+      "checks": [
+        "Verify each proposed thermal via connects the intended land to useful copper on the correct net.",
+        "Evaluate barrel length and plating as well as count; include the common spreading path in the assessment.",
+        "Check whether thermal-relief spokes unnecessarily restrict the designed heat path, then coordinate any solid connection with assembly needs.",
+        "Resolve solder-wicking risk for open via-in-pad features using the package and assembler's accepted process.",
+        "Confirm paste and via treatments preserve a reliable thermal solder joint rather than assuming more holes always help.",
+        "Specify relevant fabrication tolerances and validation instead of reusing an unexplained reference-design via count."
+      ],
+      "tradeoffs": [
+        "More or larger vias can improve conduction but compete with solder land, routing space and fabrication cost.",
+        "Solid copper connections favor heat flow while increasing the thermal load during soldering."
+      ],
+      "failure_modes": [
+        "A dense via array has weak plane connections or an inadequate spreading destination.",
+        "Solder drains into untreated holes, weakening the thermal attachment that the vias were meant to improve."
+      ],
+      "limits": [
+        "There is no universal via diameter, pitch, count, fill or thermal-relief rule.",
+        "Parallel-barrel estimates omit shared spreading resistance and manufacturing variation unless these are modeled explicitly.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "edwards-thermal",
+          "pdf_pages": [363, 364, 365],
+          "support": "Relates thermal-via geometry, plane attachment and plating to heat conduction and identifies solder wicking as an assembly risk."
+        },
+        {
+          "source_id": "freescale-an3962",
+          "pdf_pages": [14],
+          "support": "Presents thermal performance as dependent on the package, vias, copper thickness and available layers rather than vias alone."
+        }
+      ]
+    },
+    {
+      "id": "pt-place-for-airflow-and-mutual-heating",
+      "title": "Account for airflow obstruction and thermal neighbors",
+      "topics": ["placement", "thermal"],
+      "tags": ["airflow placement", "thermal shadow", "mutual heating", "temperature sensitive components", "natural convection", "enclosure ventilation"],
+      "principle": "Component temperatures depend on neighboring losses and the air or mechanical structures that carry heat away. Place heat sources and temperature-sensitive parts using the actual enclosure flow and heat paths, not a universal rule to move every hot part to an edge or to maximize spacing.",
+      "applies_when": [
+        "A board relies on forced or natural convection.",
+        "Tall parts, shields or a neighboring board obstruct cooling.",
+        "Sensitive references, sensors or capacitors sit near a power stage."
+      ],
+      "required_inputs": [
+        "Enclosure and board orientation with vents, fans and intended airflow.",
+        "Component heights, shields, cables, daughtercards and mechanical obstructions.",
+        "Heat-source losses and temperature sensitivity or derating data for nearby parts.",
+        "Board and chassis thermal connections and accessible cooling surfaces.",
+        "Operating ambient, altitude or cooling-degradation cases required by the product."
+      ],
+      "checks": [
+        "Map likely inlet, outlet, blocked and recirculating regions using the assembled geometry.",
+        "Check whether a sensitive part receives warmed air from a power stage or heat conducted through shared copper.",
+        "Reserve clearance for heat sinks, interfaces and the airflow they require, not just their mechanical footprint.",
+        "Compare spreading heat sources with preserving short electrical power loops; test alternatives rather than separating them blindly.",
+        "Include realistic cable placement, shielding, dust or reduced-flow cases where required.",
+        "Verify critical temperatures with the enclosure closed and representative simultaneous loads."
+      ],
+      "tradeoffs": [
+        "Tall components can obstruct or channel airflow; their effect depends on geometry and flow direction.",
+        "Moving a device upstream may cool it but warm a more temperature-sensitive downstream component.",
+        "Once overall heat rejection is limiting, placement changes may need to give way to improved cooling or reduced losses."
+      ],
+      "failure_modes": [
+        "An open-board test misses a hot region created by the final enclosure or cabling.",
+        "A temperature-sensitive component is protected from direct proximity but remains in a heated air or copper path."
+      ],
+      "limits": [
+        "Airflow and thermal influence cannot be inferred reliably from a top-down component view alone.",
+        "No universal edge location, spacing or airflow value guarantees cooling; limits come from the product and components.",
+        "Advisory review only: no native DRC/electrical certification, initial placement, or routing execution."
+      ],
+      "references": [
+        {
+          "source_id": "edwards-thermal",
+          "pdf_pages": [357, 365, 366, 372],
+          "support": "Explains mutual heating, warmed downstream air, system heat-rejection limits and the importance of modeling actual airflow obstructions."
+        },
+        {
+          "source_id": "orcad-tips",
+          "pdf_pages": [50],
+          "support": "Highlights airflow access, heat-sink provision and temperature-sensitive neighbors as placement considerations."
+        }
+      ]
+    }
+  ]
+}

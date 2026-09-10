@@ -1,0 +1,871 @@
+{
+  "schema_version": 1,
+  "pack_id": "placement-manufacturing",
+  "title": "Placement process and manufacturability",
+  "summary": "Original review guidance for reconciling design inputs, planning component groups, preserving mechanical and manufacturing access, and distinguishing placement readiness from a verified, saved design.",
+  "sources": [
+    {
+      "id": "cadence-forty-tips",
+      "title": "40 PCB Design Tips Every Designer Should Know",
+      "authors": [],
+      "edition": null,
+      "year": null,
+      "local_filename": "40 PCB Design Tips Every Designer Should Know.pdf",
+      "identity_note": "Title verified on PDF page 1; its OrCAD anniversary subtitle does not establish a publication year. No individual author or edition was established from the opening pages. This practical guide includes illustrative dimensions and broad advice, not approved project requirements."
+    },
+    {
+      "id": "burkhert-start-to-finish",
+      "title": "PCB Design From Start to Finish",
+      "authors": [
+        "John Burkhert"
+      ],
+      "edition": null,
+      "year": null,
+      "local_filename": "PCB Design From Start to Finish.pdf",
+      "identity_note": "PDF pages 1 and 2 verify the title and John Burkhert byline. Edition and publication year were not established. The cited passages are practical design commentary; process examples and preferred placement orders are not universal rules."
+    },
+    {
+      "id": "sierra-high-speed-guide",
+      "title": "High-Speed PCB Design Guide",
+      "authors": [],
+      "edition": null,
+      "year": 2020,
+      "local_filename": "addc6240-6ef2-4c26-aef3-3ad945773b19.pdf",
+      "identity_note": "PDF page 1 verifies the title; page 2 identifies Sierra Circuits Inc. and copyright 2020. Amit Bahl signs the foreword, which does not establish authorship of the whole guide. No edition was established; only floorplanning and support-part scheduling passages are used."
+    },
+    {
+      "id": "ema-hitchhikers-guide",
+      "title": "The Hitchhiker's Guide to PCB Design",
+      "authors": [],
+      "edition": null,
+      "year": null,
+      "local_filename": "04406ea0-b375-4940-99da-b787e0e1191a.pdf",
+      "identity_note": "PDF page 1 verifies the title. Opening contributor pages 4 and 5 describe an EMA guide with multiple industry contributors, not a single verified author. Edition and year were not established. Machine-registration examples require the actual assembler's approval."
+    },
+    {
+      "id": "printed-circuits-handbook-sixth",
+      "title": "Printed Circuits Handbook",
+      "authors": [],
+      "edition": "Sixth Edition",
+      "year": 2008,
+      "local_filename": "3152f43c-f2b3-4fa6-b4a3-5dbc454f0ad6.pdf",
+      "identity_note": "PDF page 4 verifies title, edition and Clyde F. Coombs, Jr. as editor-in-chief, not author; pages 3 and 5 show copyright 2008. No author of the cited chapter was established. Historical exchange-format commentary is used only for variant and handoff-data dependencies."
+    },
+    {
+      "id": "freescale-an3962",
+      "title": "PCB Layout Design Guide for Analog Applications",
+      "authors": [
+        "Edward Lee",
+        "Rafael Garcia Mora"
+      ],
+      "edition": "AN3962, Rev. 2.0",
+      "year": 2010,
+      "local_filename": "a19ae4ed-46d0-42be-bc4b-97073f2a0e85.pdf",
+      "identity_note": "PDF page 1 verifies title, byline, AN3962 and Rev. 2.0 dated 8/2010. Indexed metadata omits Guide from the title. Cited insulation passages reference historical standards; their tables are not used as current compliance limits."
+    },
+    {
+      "id": "chand-emi-emc-paper",
+      "title": "PCB Layout Design for EMI/EMC Compliance",
+      "authors": [
+        "Prakash Chand",
+        "BN Gangopadhyay",
+        "Meenakshi Kumar"
+      ],
+      "edition": null,
+      "year": null,
+      "local_filename": "PCB_layout_design_for_EMI_EMC_compliance.pdf",
+      "identity_note": "PDF page 1 verifies title and three authors. Publication year and edition were not established. Text extraction includes font-encoding artifacts. Only connector/filter ordering is used; generic capacitor values, ESD claims and isolation prescriptions are not adopted."
+    }
+  ],
+  "cards": [
+    {
+      "id": "pm-reconcile-inventory-footprints-and-variants",
+      "title": "Reconcile the design population before assessing placement",
+      "topics": [
+        "placement",
+        "manufacturing"
+      ],
+      "tags": [
+        "BOM reconciliation",
+        "DNP population variants",
+        "symbol to footprint mapping",
+        "reference designator inventory",
+        "package substitutions"
+      ],
+      "principle": "A placement review needs a specific design revision and population variant, not just a collection of visible packages. Reconcile schematic instances, board footprints and procurement identities before optimizing geometry, because a missing part or incorrect pin map cannot be repaired by moving a footprint.",
+      "applies_when": [
+        "Starting a placement review or receiving a revised netlist.",
+        "Changing a package, approved substitute or assembly population variant."
+      ],
+      "required_inputs": [
+        "Revision-matched schematic or netlist, board instance inventory and BOM with manufacturer part numbers.",
+        "Variant definitions, do-not-populate states, permitted substitutions and configuration-link instructions.",
+        "Approved symbol and footprint revisions, package drawings and pin-to-pad mapping.",
+        "List of mechanical-only, test and intentional off-board items that are not ordinary fitted components."
+      ],
+      "checks": [
+        "Match each in-scope reference designator across schematic, board and selected-variant BOM; explain duplicates, omissions and intentional exceptions.",
+        "Separate required-but-unplaced instances from deliberately unfitted parts; never infer population solely from a visible outline.",
+        "Check package identity, pad numbering, pin-one convention and connector mating view against the actual ordered part.",
+        "Recheck body envelope, pad geometry and orientation when approving an alternate package; a matching electrical function does not establish mechanical interchangeability.",
+        "Evaluate every supported population variant for collisions and access conflicts, including mutually exclusive links or optional components.",
+        "Resolve discrepancies with their design owner and retain the reconciliation result with the revision being reviewed."
+      ],
+      "tradeoffs": [
+        "One common PCB can support several assemblies, but their population and test instructions must remain explicit.",
+        "A supply-chain substitute may reduce procurement risk while requiring a new footprint or placement review."
+      ],
+      "failure_modes": [
+        "A DNP item is mistaken for a missing required component, or an unplaced required component is mistaken for DNP.",
+        "An electrically equivalent substitute has a different pin map, mating orientation or physical envelope.",
+        "BOM, board and schematic files describe different revisions."
+      ],
+      "limits": [
+        "Instance counts and matching reference designators do not prove correct connectivity, footprint dimensions or component availability.",
+        "This reconciliation is review guidance; it does not import a design or initially place unplaced components."
+      ],
+      "references": [
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            10
+          ],
+          "support": "Cross-checking symbols, pads, package geometry and connector orientation against authoritative part data."
+        },
+        {
+          "source_id": "printed-circuits-handbook-sixth",
+          "pdf_pages": [
+            392
+          ],
+          "support": "Component location data must be accompanied by procurement and population information to identify board variants."
+        },
+        {
+          "source_id": "burkhert-start-to-finish",
+          "pdf_pages": [
+            41
+          ],
+          "support": "Schematic review exposes connectivity mistakes and optional-component instructions that affect placement."
+        }
+      ]
+    },
+    {
+      "id": "pm-establish-fixed-mechanical-interfaces",
+      "title": "Establish mechanical anchors and mating envelopes first",
+      "topics": [
+        "placement",
+        "manufacturing"
+      ],
+      "tags": [
+        "fixed component placement",
+        "mechanical datum",
+        "connector mating envelope",
+        "mounting hole clearance",
+        "enclosure tolerance stack"
+      ],
+      "principle": "Panel interfaces, mounting features and constrained component envelopes define the space within which an electrical floorplan must work. Validate their datums, orientation and tolerances before treating them as fixed; a short connection is not a reason to move a correctly constrained mechanical interface.",
+      "applies_when": [
+        "A board mates with an enclosure, cable assembly, another board or a user-facing control.",
+        "Mechanical drawings, component heights or board thickness have changed."
+      ],
+      "required_inputs": [
+        "Released board outline, internal cutouts, mounting features and coordinate datum.",
+        "Enclosure and mating-part drawings or validated models, including tolerance information.",
+        "Connector insertion direction, latch travel, cable bend allowance and assembly sequence.",
+        "Component-side, rotation, height and fixed-placement requirements."
+      ],
+      "checks": [
+        "Align board and mechanical models to the same datum, units, side and viewing convention before comparing positions.",
+        "Verify connector pin numbering and mating orientation from the required viewing face, not from a visually similar footprint.",
+        "Check body overhang, mating insertion, latch motion, screw access and cable exit space, not only the solder-pad outline.",
+        "Evaluate both board faces and tolerance extremes for interference with mounting bosses, adjacent boards and enclosure features.",
+        "Record validated anchors as fixed constraints in the plan; escalate conflicts rather than silently displacing them.",
+        "Obtain fabrication and mechanical-owner agreement where outline, hole position, board thickness or flatness tolerances control fit."
+      ],
+      "tradeoffs": [
+        "An electrically convenient connector location may be incompatible with panel access or the assembly sequence.",
+        "Tighter fit can reduce product size but increase manufacturing difficulty and sensitivity to tolerance accumulation."
+      ],
+      "failure_modes": [
+        "A model uses the wrong connector view or board-side transformation.",
+        "Nominal geometry fits while a permitted tolerance extreme blocks insertion or contacts the enclosure.",
+        "A later optimization moves an interface whose position was assumed to be immutable."
+      ],
+      "limits": [
+        "A footprint origin or fixed flag is not evidence that the mechanical requirement is correct.",
+        "A nominal 3D view cannot establish production fit without trustworthy models, tolerances and mechanical review."
+      ],
+      "references": [
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            10,
+            20,
+            28
+          ],
+          "support": "Mechanical interfaces, connector views and height restrictions must be considered before unconstrained placement."
+        },
+        {
+          "source_id": "burkhert-start-to-finish",
+          "pdf_pages": [
+            31
+          ],
+          "support": "Mechanical tolerance requests require fabrication review rather than acceptance from nominal drawings alone."
+        }
+      ]
+    },
+    {
+      "id": "pm-floorplan-functional-dependencies",
+      "title": "Floorplan functional groups around real dependencies",
+      "topics": [
+        "placement",
+        "routing-readiness"
+      ],
+      "tags": [
+        "functional floorplanning",
+        "schematic placement notes",
+        "dependency grouping",
+        "signal flow",
+        "interblock connections"
+      ],
+      "principle": "Use the schematic and interface requirements to identify groups whose members must cooperate physically, then allocate board regions around their constrained connections. Group membership is a planning aid rather than a demand for rigid islands: shared resources and cross-group interfaces still need feasible routes and access.",
+      "applies_when": [
+        "Establishing a floorplan or reviewing widespread component scattering.",
+        "Reconciling competing block locations on a mechanically constrained board."
+      ],
+      "required_inputs": [
+        "Schematic connectivity, layout notes and functional block ownership.",
+        "Fixed mechanical anchors, usable board regions and keepouts.",
+        "Critical connection priorities, interface destinations and device-specific placement constraints.",
+        "Preliminary routing capacity, manufacturing access and applicable domain-separation requirements."
+      ],
+      "checks": [
+        "Assign each main device and its associated support network to a functional group; identify shared resources explicitly.",
+        "Map intergroup connections to their real endpoints and rank them by approved constraints, not merely by the number of connection lines.",
+        "Allocate group regions relative to fixed interfaces and critical neighbors, leaving space for support parts and routing between groups.",
+        "Inspect whether an intended connection must repeatedly cross unrelated circuitry or constrained regions; revise the group arrangement when this is avoidable.",
+        "Preserve searchable placement notes describing why each constrained relationship exists.",
+        "Review the floorplan against mechanical, test and assembly needs before refining individual poses."
+      ],
+      "tradeoffs": [
+        "Compact groups simplify local wiring, but excessive packing can obstruct intergroup routes and maintenance access.",
+        "Separating incompatible functions may lengthen necessary interfaces; resolve the actual electrical constraints rather than optimizing visual symmetry."
+      ],
+      "failure_modes": [
+        "Components are grouped only by reference-designator sequence or package appearance.",
+        "A visually tidy partition forces important interfaces through unrelated circuitry.",
+        "Shared support or control circuitry has no assigned physical space."
+      ],
+      "limits": [
+        "A block diagram does not establish pin-level routing feasibility or electrical performance.",
+        "Functional separation does not by itself justify cutting reference planes or define safety isolation."
+      ],
+      "references": [
+        {
+          "source_id": "burkhert-start-to-finish",
+          "pdf_pages": [
+            38,
+            42
+          ],
+          "support": "Schematic layout notes and connection priorities inform physical grouping and placement order."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [
+            78
+          ],
+          "support": "Floorplanning connects schematic groups to board regions while accounting for crossing paths and routing channels."
+        },
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            24
+          ],
+          "support": "Functional grouping must be reviewed against signal flow, available corridors and other design constraints."
+        }
+      ]
+    },
+    {
+      "id": "pm-reserve-critical-support-parts-early",
+      "title": "Reserve constrained support networks before filling gaps",
+      "topics": [
+        "placement",
+        "routing-readiness"
+      ],
+      "tags": [
+        "critical support parts",
+        "crystal load components",
+        "termination placement reservation",
+        "decoupling space reservation",
+        "pin-specific placement dependencies"
+      ],
+      "principle": "The main device and its placement-critical support network should be planned as a dependency set, not as a large package followed by whatever fits nearby. Reserve the positions and routing space demanded by approved device guidance before less constrained components consume them.",
+      "applies_when": [
+        "Planning around a processor, oscillator, interface device or other component with constrained support circuitry.",
+        "A late passive placement requires moving major devices or blocks important routing space."
+      ],
+      "required_inputs": [
+        "Pin-level schematic connectivity and current device layout requirements.",
+        "Inventory of support parts, including optional population states and their roles.",
+        "Verified footprint geometry, package orientation and usable placement sides.",
+        "Mechanical, assembly and routing-space constraints around the main device."
+      ],
+      "checks": [
+        "List the required support networks and identify which pins or interface segments constrain their position.",
+        "Distinguish placement-critical members from loosely constrained bias or configuration parts using circuit requirements, not component value or reference prefix.",
+        "Reserve body, courtyard and connection space for the constrained network before allocating the remaining area.",
+        "Check that rotating or moving the main device preserves feasible access to the relevant pins and does not displace a required support part.",
+        "Revisit the dependency set after footprint, pin-assignment or population changes.",
+        "Defer component-value selection and detailed power or signal-path verification to the applicable circuit analysis rather than treating proximity as sufficient."
+      ],
+      "tradeoffs": [
+        "Keeping support parts adjacent can compete with assembly access and routing space; the circuit requirement and process constraints must both be met.",
+        "Using the opposite board face can free area but changes assembly and connection feasibility."
+      ],
+      "failure_modes": [
+        "A constrained capacitor, resistor or crystal network is left to occupy residual space.",
+        "A part is near the package center but poorly positioned relative to the pin it serves.",
+        "A main-device rotation invalidates previously reserved support positions."
+      ],
+      "limits": [
+        "This card schedules and reserves placement resources; it does not specify decoupling values, termination topology or power-loop geometry.",
+        "A compact support group does not prove the required electrical connections or performance."
+      ],
+      "references": [
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [
+            78,
+            79
+          ],
+          "support": "Early floorplanning protects space for support components associated with the main devices."
+        },
+        {
+          "source_id": "burkhert-start-to-finish",
+          "pdf_pages": [
+            42
+          ],
+          "support": "Peripheral placement priorities depend on constrained links and the pins served by nearby support parts."
+        }
+      ]
+    },
+    {
+      "id": "pm-review-routing-corridors-and-congestion",
+      "title": "Use routing bottlenecks as placement feedback",
+      "topics": [
+        "placement",
+        "routing-readiness"
+      ],
+      "tags": [
+        "routing corridor",
+        "placement congestion",
+        "ratsnest review",
+        "routing feasibility",
+        "bottleneck feedback"
+      ],
+      "principle": "A placement is not routing-ready merely because packages do not overlap. Review the constrained paths between groups and reserve capacity for their actual routing rules; when a bottleneck appears, reconsider permitted placement choices rather than assuming routing effort will overcome it.",
+      "applies_when": [
+        "A dense placement has no obvious paths between important endpoints.",
+        "Routing feedback shows detours, blocked channels or recurring violations."
+      ],
+      "required_inputs": [
+        "Current placed-component geometry and pin-level connection data.",
+        "Approved stackup, usable routing layers, route widths and spacing constraints.",
+        "Keepouts, occupied copper or routing, fixed features and reserved support-part areas.",
+        "Critical-net priorities and any available routing-feasibility or congestion evidence."
+      ],
+      "checks": [
+        "Identify narrow channels, opposing pin fields and crossings between groups using current connectivity rather than package outlines alone.",
+        "Compare available corridor space with the routes and constraints that must share it; include obstacles on the layers expected to carry those routes.",
+        "Reserve access to high-density devices without assuming that empty space on one layer guarantees access through the whole stack.",
+        "Compare permitted device orientations or group positions for route access while preserving mechanical anchors and support dependencies.",
+        "Where approved tools are available, request controlled routing-feasibility checks and feed unresolved bottlenecks back into the placement plan.",
+        "After a proposed change, compare both the relieved region and neighboring channels so that congestion is not merely transferred elsewhere."
+      ],
+      "tradeoffs": [
+        "Wider corridors may increase connection lengths or board area but can reduce difficult detours.",
+        "A favorable connection-line total can hide one critical bottleneck; prioritize constrained paths rather than a single aggregate metric."
+      ],
+      "failure_modes": [
+        "All open space is filled with passives before intergroup paths are considered.",
+        "A local move clears one device while closing a neighboring route corridor.",
+        "Straight connection lines are mistaken for legal completed routes."
+      ],
+      "limits": [
+        "Ratsnest appearance and estimated capacity are screening evidence, not proof that routing can complete.",
+        "This guidance does not provide an autorouter, native route execution or a detailed fanout recipe."
+      ],
+      "references": [
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            24,
+            72
+          ],
+          "support": "Preserving interblock routing space and using staged design checks supports iterative placement review."
+        },
+        {
+          "source_id": "sierra-high-speed-guide",
+          "pdf_pages": [
+            78
+          ],
+          "support": "Component planning must account for routing channels rather than only short connections within functional groups."
+        }
+      ]
+    },
+    {
+      "id": "pm-check-assembly-and-rework-envelopes",
+      "title": "Check assembly and rework volumes beyond courtyards",
+      "topics": [
+        "placement",
+        "manufacturing"
+      ],
+      "tags": [
+        "component courtyard",
+        "height keepout",
+        "assembly spacing",
+        "AOI access",
+        "rework nozzle clearance",
+        "cleaning access"
+      ],
+      "principle": "A component courtyard is a useful library boundary, but it does not describe every volume needed to install, inspect, clean or replace a part. Review placement against the actual assembly process, component heights and required service operations instead of applying a generic spacing number.",
+      "applies_when": [
+        "Dense placement, mixed component heights or two-sided assembly is proposed.",
+        "A component must remain inspectable, cleanable or replaceable after neighboring parts are fitted."
+      ],
+      "required_inputs": [
+        "Verified package bodies, courtyards, terminal geometry and maximum heights on both board faces.",
+        "Assembler-approved placement, soldering, inspection and cleaning capabilities.",
+        "Required rework operations, tool envelopes and assembly sequence.",
+        "Enclosure, shield, fixture and neighboring-component restrictions."
+      ],
+      "checks": [
+        "Distinguish body, terminal, courtyard and height boundaries; identify which process requirement each enforced clearance represents.",
+        "Check tool approach and extraction paths for placement and required rework, including obstructions from taller neighboring parts.",
+        "Review inspection visibility and cleaning access with the assembler rather than assuming a nominal gap guarantees either.",
+        "Inspect both board faces for interactions with fixtures, shields and already assembled components.",
+        "Apply process-specific clearances from approved manufacturing data; record exceptions and the operation they affect.",
+        "Obtain an assembly review using enough geometry and assembly information to evaluate more than a top-down image."
+      ],
+      "tradeoffs": [
+        "Greater density can reduce board size while making inspection, cleaning or component replacement harder.",
+        "Rework access may justify reserving space around a critical part even when ordinary placement clearances pass."
+      ],
+      "failure_modes": [
+        "Courtyard checks pass but the rework tool cannot reach or remove the component.",
+        "A tall part obscures an inspection target or blocks the required manufacturing approach.",
+        "A footprint lacks a trustworthy body outline or height, making an apparent clearance misleading."
+      ],
+      "limits": [
+        "No universal assembly gap, rework margin or height limit follows from these references.",
+        "Geometric clearance alone does not qualify soldering yield, cleaning effectiveness or a repair process."
+      ],
+      "references": [
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            26,
+            28
+          ],
+          "support": "Assembly access, rework needs, component heights and mechanical restrictions require process-specific review."
+        },
+        {
+          "source_id": "ema-hitchhikers-guide",
+          "pdf_pages": [
+            44
+          ],
+          "support": "An assembly stakeholder needs suitable design and assembly information to review the placement effectively."
+        }
+      ]
+    },
+    {
+      "id": "pm-verify-orientation-markings-and-fiducials",
+      "title": "Make orientation and machine registration unambiguous",
+      "topics": [
+        "placement",
+        "manufacturing"
+      ],
+      "tags": [
+        "polarity marking",
+        "pin one identification",
+        "reference designator readability",
+        "global and local fiducials",
+        "placement rotation convention"
+      ],
+      "principle": "Human-readable orientation marks and machine-readable fiducials solve different assembly problems and need separate checks. Keep package polarity, reference designators, placement-data rotations and registration features consistent with the selected parts and the assembler's process.",
+      "applies_when": [
+        "Preparing assembly documentation or reviewing a placement revision.",
+        "Using polarized parts, two-sided assembly, fine-pitch devices or panel-level registration."
+      ],
+      "required_inputs": [
+        "Actual component markings, datasheets and verified symbol-to-pad mapping.",
+        "Assembly drawings, selected-variant BOM and placement origin, side and rotation conventions.",
+        "Fabricator legend capabilities and assembler requirements for fiducial shape, finish, clearance and visibility.",
+        "Panel arrangement, component heights and assembly-machine access restrictions."
+      ],
+      "checks": [
+        "Verify the meaning of every polarity or pin-one mark against the actual component; do not assume a stripe means the same terminal on every part family.",
+        "Cross-check footprint orientation, assembly drawing and placement-data rotation, including bottom-side viewing conventions.",
+        "Keep reference designators uniquely associated with their parts; use a clear assembly drawing when the board legend cannot carry all identifiers.",
+        "Check legend against solderable pads, test contacts and registration targets using the fabricator's rules.",
+        "Review board, panel and any required local fiducials with the assembler; reserve their specified optical clearance and line of sight.",
+        "Recheck markings and fiducial visibility after component moves, panel changes or output regeneration."
+      ],
+      "tradeoffs": [
+        "Large, visible labels aid manual work but compete for space; assembly documentation can carry detail that does not fit on the board.",
+        "Local registration targets may improve a particular placement process while consuming space near dense devices."
+      ],
+      "failure_modes": [
+        "The board mark and the placement-data rotation describe opposite orientations.",
+        "A reference label becomes ambiguous or disappears beneath a newly moved component.",
+        "A fiducial is present in the design but obscured by legend, a component or the panel handling arrangement."
+      ],
+      "limits": [
+        "A correct-looking mark cannot establish that electrical pin mapping is correct.",
+        "Fiducial count, dimensions and optical clearance must come from the actual assembly process, not a universal example."
+      ],
+      "references": [
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            10,
+            30
+          ],
+          "support": "Pin and polarity validation must agree with readable markings that do not interfere with functional board features."
+        },
+        {
+          "source_id": "ema-hitchhikers-guide",
+          "pdf_pages": [
+            44,
+            45
+          ],
+          "support": "Fiducials support optical registration, and local targets can be an assembler-specific requirement."
+        }
+      ]
+    },
+    {
+      "id": "pm-protect-board-edges-and-depanelization",
+      "title": "Plan edge clearances with the panel and removal process",
+      "topics": [
+        "placement",
+        "manufacturing"
+      ],
+      "tags": [
+        "board edge clearance",
+        "depanelization stress",
+        "V score",
+        "breakaway tabs",
+        "assembly panel rails",
+        "internal cutouts"
+      ],
+      "principle": "The finished board outline is only one boundary relevant to placement: slots, breakaway features, panel rails and depanelization tooling also consume space. Establish those process constraints early so that a compact edge placement does not become an assembly obstruction or a damage risk.",
+      "applies_when": [
+        "A design uses assembly panels, scored edges, routed tabs or internal cutouts.",
+        "Connectors, fragile components or test contacts are close to a finished or temporary edge."
+      ],
+      "required_inputs": [
+        "Finished outline and cutout geometry with manufacturing tolerances.",
+        "Agreed panel arrangement, rails, tooling, breakaway features and removal method.",
+        "Fabricator and assembler limits for copper, terminals, component bodies and process-tool access.",
+        "Edge-interface drawings and any specifically approved overhang, plating or castellated features."
+      ],
+      "checks": [
+        "Identify every relevant edge and removal feature, including internal slots and boundaries that exist only during assembly.",
+        "Apply separately approved restrictions to copper, vias, terminals and component envelopes; do not substitute one edge rule for all object types.",
+        "Check that overhanging connectors can be installed while the board remains in its intended panel configuration.",
+        "Review fragile or high-profile parts near tabs and scores with the assembler for removal-tool access and mechanical loading.",
+        "Preserve rail handling, fixture contact and tooling access throughout the planned assembly sequence.",
+        "Document intended edge exceptions and rerun the edge review after panel or outline revisions."
+      ],
+      "tradeoffs": [
+        "A panel that uses material efficiently may complicate connector assembly or board removal.",
+        "Moving parts inward can reduce process risk while increasing board area or connection length."
+      ],
+      "failure_modes": [
+        "Late-added tabs or rails conflict with a connector or component body.",
+        "A clearance review checks only the outer perimeter and misses a routed slot.",
+        "A nearby part survives placement but is damaged when the board is separated."
+      ],
+      "limits": [
+        "The references do not establish universal setbacks for any panel or depanelization method.",
+        "A visual edge gap does not demonstrate acceptable strain, handling reliability or process capability."
+      ],
+      "references": [
+        {
+          "source_id": "burkhert-start-to-finish",
+          "pdf_pages": [
+            32
+          ],
+          "support": "Subpanel planning must account for connectors, breakaway features and assembler-specific handling dimensions early."
+        },
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            32
+          ],
+          "support": "Edge review includes component and copper restrictions, internal cutouts and panel removal features."
+        }
+      ]
+    },
+    {
+      "id": "pm-preserve-test-and-probe-access",
+      "title": "Design test access for the intended test method",
+      "topics": [
+        "placement",
+        "manufacturing"
+      ],
+      "tags": [
+        "test point access",
+        "probe keepout",
+        "in circuit test",
+        "flying probe",
+        "programming access",
+        "test coverage"
+      ],
+      "principle": "A test point is useful only if the intended instrument can contact it at the required assembly stage and make a meaningful measurement. Reserve probe and fixture access from an explicit test plan, balancing coverage against board area, physical risk and the electrical effect of added access features.",
+      "applies_when": [
+        "Planning bring-up, production test, programming or field-service access.",
+        "Moving parts near test contacts or converting a prototype into a production assembly."
+      ],
+      "required_inputs": [
+        "Required test and programming operations, selected-variant coverage and measurement limits.",
+        "Probe or fixture contact geometry, approach direction, access side and handling requirements.",
+        "Test-contact net assignments, pad finish and mask definition.",
+        "Assembled component heights, shields and enclosure state at each test stage.",
+        "Permitted loading and connection changes for sensitive measurements."
+      ],
+      "checks": [
+        "Map required observations and programming operations to accessible contacts; explicitly record untested items rather than assuming complete coverage.",
+        "Select the contact type, board side and spacing from the actual test equipment; do not impose a universal preference for top-side access.",
+        "Check approach and withdrawal space around each contact, including neighboring parts, fixture hardware and the measurement reference contact.",
+        "Verify contact exposure, net identity and labels in the same variant and assembly stage that will be tested.",
+        "Review the electrical effect of access structures and probing on sensitive nets before accepting a convenient contact location.",
+        "Have the test owner confirm fixture compatibility and usable coverage after placement changes."
+      ],
+      "tradeoffs": [
+        "More test contacts can improve observability but consume area and alter sensitive circuits.",
+        "A contact convenient for manual debugging may be unsuitable for a production fixture or inaccessible after enclosure assembly."
+      ],
+      "failure_modes": [
+        "A visible pad cannot be reached by the intended probe.",
+        "A fitted option, shield or enclosure blocks access that existed in a prototype.",
+        "The measurement connection perturbs the behavior being tested."
+      ],
+      "limits": [
+        "Physical contact availability does not prove fault coverage or measurement validity.",
+        "No pad dimension, probe spacing or fixture grid is universal; obtain the test provider's requirements."
+      ],
+      "references": [
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            26,
+            74
+          ],
+          "support": "Test planning must connect required signals, physical probe access, documentation and instrument effects."
+        }
+      ]
+    },
+    {
+      "id": "pm-derive-isolation-boundaries-from-approved-requirements",
+      "title": "Derive insulation boundaries from approved safety requirements",
+      "topics": [
+        "placement",
+        "manufacturing"
+      ],
+      "tags": [
+        "creepage",
+        "clearance",
+        "insulation coordination",
+        "isolation barrier",
+        "pollution degree",
+        "material group CTI"
+      ],
+      "principle": "Air clearance and surface creepage are different insulation paths and must be evaluated separately for the actual product. Placement should preserve a barrier derived from approved safety requirements, operating conditions and material data, not from a voltage-only rule of thumb or a historical table.",
+      "applies_when": [
+        "Separating hazardous, isolated or otherwise safety-constrained circuits.",
+        "Changing components, slots, materials, mounting hardware or environmental assumptions near an insulation boundary."
+      ],
+      "required_inputs": [
+        "Applicable product standard and revision, insulation function and documented safety-owner interpretation.",
+        "Working voltage, expected transient conditions and relevant overvoltage classification.",
+        "Pollution degree, altitude and service environment applicable to the product.",
+        "Insulating material identification and approved tracking or material-group data.",
+        "Actual conductor, component, slot and mounting geometry on both faces with tolerances.",
+        "Approved coating, cleaning and manufacturing controls, if the safety assessment relies on them."
+      ],
+      "checks": [
+        "Identify the exact circuits and accessible conductive parts separated by each required barrier, together with its insulation function.",
+        "Obtain the required air and surface distances from the applicable approved assessment; stop short of declaring compliance when inputs are missing.",
+        "Inspect possible shortest paths through air and along insulating surfaces, including terminals, vias, component bodies and nearby hardware.",
+        "Check tolerances and allowed assembly states for an encroachment that a nominal top-down view would miss.",
+        "Credit a slot, coating or other mitigation only when its geometry and process satisfy the applicable assessment; a slot does not automatically improve every insulation path.",
+        "Reassess the barrier after material, package, mounting or cleanliness-control changes and retain the approval basis."
+      ],
+      "tradeoffs": [
+        "A larger barrier reserves more area but can simplify manufacturing control and safety review.",
+        "Slots or coatings may provide an approved solution in some products while adding process dependencies and verification work."
+      ],
+      "failure_modes": [
+        "A historical voltage table is used without its insulation, environmental or material conditions.",
+        "Hardware or a component terminal creates a shorter path than the intended PCB trace spacing.",
+        "Nominal separation passes while manufacturing tolerances or a changed population state violate the approved barrier."
+      ],
+      "limits": [
+        "No numerical safety clearance is supplied; a qualified safety review must establish the applicable requirements.",
+        "The cited 2010 application note supports definitions and input dependencies, not present-day certification or standard selection.",
+        "Electrical-rule checks and screenshots cannot establish dielectric qualification, production cleanliness or compliance."
+      ],
+      "references": [
+        {
+          "source_id": "freescale-an3962",
+          "pdf_pages": [
+            5,
+            6,
+            9,
+            10
+          ],
+          "support": "Insulation checks distinguish air and surface paths and depend on conditions such as insulation type, transients, pollution and material group."
+        }
+      ]
+    },
+    {
+      "id": "pm-plan-connector-protection-and-filter-chain",
+      "title": "Reserve the approved interface protection and filter chain",
+      "topics": [
+        "placement",
+        "routing-readiness"
+      ],
+      "tags": [
+        "connector interface placement",
+        "input filter",
+        "ESD protection placement",
+        "protected and unprotected regions",
+        "mating interface"
+      ],
+      "principle": "Treat an external connector and its specified protection or filtering network as an interface group with an intentional order of connection. Reserve space that makes the approved topology physically realizable without forcing unconditioned interface wiring deep into unrelated circuitry; proximity alone does not establish protection or filtering.",
+      "applies_when": [
+        "A cable-facing input or output includes approved protection, filtering or conditioning parts.",
+        "Mechanical connector constraints compete with available space for the interface network."
+      ],
+      "required_inputs": [
+        "Connector pinout, mating view, cable function and fixed mechanical envelope.",
+        "Approved interface schematic and component-specific layout instructions.",
+        "Signal bandwidth and permitted loading, together with the interface's ESD or EMC requirements.",
+        "Identification of the intended protected and unprotected circuit regions and relevant physical boundaries."
+      ],
+      "checks": [
+        "Trace each applicable interface from its connector pin through the approved network to the internal endpoint; do not invent a universal protection/filter order.",
+        "Reserve space for that chain when fixing connector placement, including package orientation and component access.",
+        "Verify that prospective connection paths actually traverse the intended elements rather than bypassing them or requiring avoidable excursions through other circuitry.",
+        "Review adjacent unconditioned and conditioned wiring so that placement does not undermine the intended boundary.",
+        "Check component choices and layout against the device and interface requirements before adopting a generic filter example.",
+        "Revisit the group after connector pinout, cable, filter population or enclosure changes."
+      ],
+      "tradeoffs": [
+        "Keeping an interface network near its connector can compete with mechanical access and edge-manufacturing restrictions.",
+        "Additional filtering may reduce unwanted coupling while degrading the wanted signal; the approved circuit must determine whether it is appropriate."
+      ],
+      "failure_modes": [
+        "The connector is fixed before space is allocated for its required protection network.",
+        "A visually nearby filter is bypassed by the actual connection topology.",
+        "A generic capacitor or protection arrangement is copied without checking interface behavior."
+      ],
+      "limits": [
+        "This card does not prescribe filter values, a discharge-path design or protection-device ratings.",
+        "The cited paper's numerical examples and broad ESD claims are not adopted as requirements.",
+        "Correct grouping cannot prove immunity, emissions compliance or protection effectiveness; those need circuit review and appropriate testing."
+      ],
+      "references": [
+        {
+          "source_id": "chand-emi-emc-paper",
+          "pdf_pages": [
+            5
+          ],
+          "support": "The filtering discussion places interface elements in relation to the connector and internal circuitry; only this placement relationship is used."
+        },
+        {
+          "source_id": "burkhert-start-to-finish",
+          "pdf_pages": [
+            22
+          ],
+          "support": "External connectors are a relevant location for specified ESD suppression, and passive networks have distinct filtering functions."
+        },
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            24
+          ],
+          "support": "Functional groups and connector destinations should support the intended interface paths."
+        }
+      ]
+    },
+    {
+      "id": "pm-separate-placement-routing-and-persistence-evidence",
+      "title": "Report placement, routing, verification and persistence separately",
+      "topics": [
+        "placement",
+        "routing-readiness",
+        "manufacturing"
+      ],
+      "tags": [
+        "placement completion",
+        "unrouted connections",
+        "DRC ERC evidence",
+        "native state verification",
+        "save and reopen verification",
+        "manufacturing release"
+      ],
+      "principle": "Placement review, routing completion, design checks and saved release state are different milestones with different evidence. As an original workflow policy, report each milestone against an identified board revision and never translate a successful in-memory pose change into a claim that the design is routed, production-ready or persistently saved.",
+      "applies_when": [
+        "Summarizing a placement review or any approved editor operation.",
+        "Preparing a handoff, manufacturing release or recovery after an uncertain tool outcome."
+      ],
+      "required_inputs": [
+        "Exact board identity, revision, selected variant and scope of the review or authorized operation.",
+        "Current native state evidence and, for an edit, the exact human-approved proposal and fresh preconditions.",
+        "Connectivity and applicable placement/routing check results, including unresolved issues and documented waivers.",
+        "Save, reopen and output-generation evidence from an authorized workflow, when persistence or release is claimed.",
+        "Revision-matched manufacturing and test deliverables required by the receiving parties."
+      ],
+      "checks": [
+        "Report inventory and placement coverage explicitly; distinguish reviewed parts, missing required placements and intentional DNP states.",
+        "Report unrouted connectivity and routing checks separately from component poses and placement-clearance results.",
+        "For a permitted edit, verify the exact intended native before/after change and approval scope; reconcile an uncertain outcome before considering another operation.",
+        "Keep DRC, ERC and manufacturing-review results tied to the checked state; record exclusions and unresolved findings rather than treating an image as a pass.",
+        "Call a result persistent only when authorized save and reopen evidence establishes the intended state; otherwise label persistence unverified.",
+        "Before a release claim, reconcile the saved native design with the BOM, assembly, fabrication and test outputs required for that same revision and variant."
+      ],
+      "tradeoffs": [
+        "Incremental reporting enables useful early review but requires clear boundaries around what has not yet been checked.",
+        "More evidence costs review time, yet prevents a local placement success from being mistaken for a completed manufacturing handoff."
+      ],
+      "failure_modes": [
+        "A clean screenshot or zero visible airwires is treated as complete electrical and manufacturing verification.",
+        "An in-memory change is reported as saved despite absent persistence evidence.",
+        "A release package combines outputs from different board revisions or population variants."
+      ],
+      "limits": [
+        "Approval, precondition, outcome-reconciliation and persistence rules here are original software workflow policy, not capabilities specified by the books.",
+        "These cards grant no editor authority. The prototype's guarded pose workflow concerns already-placed fixture components, not autonomous initial placement, routing or native production-board support.",
+        "Python tests and textual reviews do not establish native SKILL execution, licensing, dispatch, DRC or persistent board state."
+      ],
+      "references": [
+        {
+          "source_id": "cadence-forty-tips",
+          "pdf_pages": [
+            16,
+            72
+          ],
+          "support": "Staged design checks and revision-aware archiving support separating review status from a complete retained design package."
+        },
+        {
+          "source_id": "printed-circuits-handbook-sixth",
+          "pdf_pages": [
+            392
+          ],
+          "support": "A manufacturing handoff depends on compatible design data together with component and population information."
+        }
+      ]
+    }
+  ]
+}
