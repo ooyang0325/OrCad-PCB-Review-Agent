@@ -121,6 +121,26 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(self.transport.sent, 1)
         self.assertFalse((self.root / "pending.json").exists())
 
+    def test_scoped_reconciliation_rechecks_identity_and_operation_under_lock(self):
+        self.transport.mode = "timeout"
+        with self.assertRaises(IndeterminateDelivery):
+            self.session.exchange(self.request(), EDITOR)
+        write_new(
+            self.root / ("a" * 32 + ".result.csv"), self.transport.response("a" * 32)
+        )
+        for request_id, operation in [("b" * 32, "snapshot"), ("a" * 32, "apply")]:
+            with self.assertRaises(SessionError):
+                self.session.reconcile(
+                    expected_request_id=request_id, expected_operation=operation
+                )
+            self.assertTrue((self.root / "pending.json").exists())
+        self.assertEqual(
+            self.session.reconcile(
+                expected_request_id="a" * 32, expected_operation="snapshot"
+            ).status, "snapshot"
+        )
+        self.assertEqual(self.transport.sent, 1)
+
     def test_rejected_window_identity_is_not_an_unresolved_operation(self):
         self.transport.mode = "identity"
         with self.assertRaises(TransportError):

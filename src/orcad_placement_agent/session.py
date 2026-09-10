@@ -215,7 +215,10 @@ class Session:
         (self.root / "pending.json").unlink()
         return receipt
 
-    def reconcile(self) -> Receipt:
+    def reconcile(
+        self, *, expected_request_id: str | None = None,
+        expected_operation: str | None = None,
+    ) -> Receipt:
         """Read only a late terminal receipt. Never replay or assume rollback."""
         lock = self.root / ".inflight"
         try:
@@ -229,6 +232,10 @@ class Session:
             request_id = identifier(pending["request_id"])
             if pending["operation"] not in {"snapshot", "apply", "save"}:
                 raise SessionError("Invalid unresolved operation.")
+            if expected_request_id is not None and request_id != expected_request_id:
+                raise SessionError("A different request is pending; nothing was reconciled.")
+            if expected_operation is not None and pending["operation"] != expected_operation:
+                raise SessionError("The pending operation changed; nothing was reconciled.")
             if not (self.root / f"{request_id}.result.csv").exists():
                 raise IndeterminateDelivery(
                     "No terminal receipt is available. Inspect the dedicated board "
