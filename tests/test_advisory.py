@@ -49,7 +49,7 @@ class AdvisoryTests(unittest.TestCase):
         self.assertFalse(context["authority"]["approves_board_changes"])
         self.assertFalse(context["authority"]["calls_model_provider"])
         self.assertTrue(context["backend_capabilities"]["declaration_only"])
-        self.assertFalse(context["backend_capabilities"]["initial_component_placement"])
+        self.assertEqual(context["backend_capabilities"]["initial_placement_model"], "managed-board-v1")
         self.assertIsNone(context["snapshot"])
         self.assertTrue(context["required_missing_inputs"])
         ids = [item["evidence_id"] for item in context["evidence"]]
@@ -81,7 +81,7 @@ class AdvisoryTests(unittest.TestCase):
         self.assertEqual(context["topics"], ["routing-readiness"])
         self.assertEqual(len(context["queries"]), 3)
         self.assertTrue(all(item["topic"] == "routing-readiness" for item in context["queries"]))
-        self.assertFalse(context["backend_capabilities"]["initial_component_placement"])
+        self.assertEqual(context["backend_capabilities"]["default_native_model"], "fixture")
         self.assertFalse(context["backend_capabilities"]["routing_feasibility_verification"])
         self.assertFalse(context["authority"]["approves_board_changes"])
 
@@ -179,10 +179,13 @@ class AgentProfileTests(unittest.TestCase):
         profiles = list((root / ".github" / "agents").glob("pcb-*.agent.md"))
         self.assertEqual(len(profiles), 4)
         extra_tools = {
-            "pcb-placement-planner.agent.md": {"pcb_prepare_placement"},
-            "pcb-layout-reviewer.agent.md": {"pcb_execution_status"},
-            "pcb-placement-executor.agent.md": {"pcb_apply_placement", "pcb_execution_status"},
-            "pcb-placement-orchestrator.agent.md": {"agent", "todo", "pcb_execution_status"},
+            "pcb-placement-planner.agent.md": {"pcb_prepare_placement", "pcb_plan_placement",
+                                              "pcb_placement_status", "pcb_prepare_next_placement"},
+            "pcb-layout-reviewer.agent.md": {"pcb_execution_status", "pcb_placement_status", "pcb_save_status"},
+            "pcb-placement-executor.agent.md": {"pcb_apply_placement", "pcb_execution_status", "pcb_placement_status",
+                                               "pcb_prepare_save", "pcb_save_revision", "pcb_save_status"},
+            "pcb-placement-orchestrator.agent.md": {"agent", "todo", "pcb_execution_status", "pcb_plan_placement",
+                                                   "pcb_placement_status", "pcb_save_status"},
         }
         for profile in profiles:
             text = profile.read_text(encoding="utf-8")

@@ -77,6 +77,8 @@ def save_status(session: Session, digest: str) -> dict[str, object]:
         return {"status": "indeterminate", "message": "Save approval was consumed but no terminal receipt is recorded. Do not resend."}
     if receipt.nonce != session.nonce or receipt.request_id != request_id:
         raise ProtocolError("Save receipt belongs to another operation.")
+    if receipt.status not in {"saved", "rejected"}:
+        raise ProtocolError("Recorded receipt is not a terminal Save outcome.")
     result = {"status": receipt.status, "receipt": receipt.to_dict(), "reopened": False}
     if receipt.status == "saved":
         destination = session.root / value["destination"]
@@ -85,4 +87,8 @@ def save_status(session: Session, digest: str) -> dict[str, object]:
         if Path(receipt.one("saved")[1]).resolve() != destination.resolve():
             raise ProtocolError("Native Save returned a different revision path; do not retry.")
         result["message"] = "Native Save reported a separate revision. Reopen verification has not been performed."
+    if (session.root / "pending.json").is_file():
+        pending = session._read_json("pending.json")
+        if pending.get("operation") == "snapshot":
+            result["pending_inspection"] = identifier(pending.get("request_id"))
     return result

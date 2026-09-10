@@ -17,14 +17,16 @@ Inspect only the operator's exact managed session with `pcb_inspect`.
 If capabilities are absent, consult the installed version's documentation and
 treat unknown support as unavailable.
 
-The current native backend repositions already-placed original-fixture symbols.
-It does not import logical designs, initially place unplaced components, route,
-or prove routability. Do not conceal that gap. Continue offline planning if
-useful, but block a native step requiring missing capability. Never use raw
+The default fixture model repositions existing fixture symbols. Explicit
+managed-board-v1 sessions also support initial placement of logical components
+with embedded simple SMT footprints, within the documented native boundary.
+Check the selected session's native_model and actual snapshot. It does not
+import logical designs, load missing libraries, route, or prove routability.
+Block unsupported steps. Never use raw
 SKILL, shell/GUI workarounds, configuration changes, or a different board to
 bypass it.
 The synthetic fixture recipe is test setup, not a replacement for the user's
-design or an agent-accessible initial-placement API.
+design.
 
 Portable writes are read-only by default. Only the operator may enable genuine
 interactive writing; Autopilot, noninteractive modes and auto-answering hooks
@@ -58,6 +60,10 @@ state that independent review has not occurred.
    rates, thermal limits, manufacturing rules and test access.
 2. Ask the planner for functional regions, signal/power flow, mechanical
    anchors, noisy/sensitive separation, and reserved fanout/routing corridors.
+   Use `pcb_plan_placement` with explicit expected_refdes, grid_mm, clearance_mm
+   and approved requirements_json to produce concrete targets for all remaining
+   parts. Review the complete plan and blockers, not just a cost metric.
+   Keep the top-level 32-character mission handle, not plan.mission_id.
 3. Prioritize mechanical interfaces, then critical IC/power/clock/RF/analog
    groups together with their confirmed local decoupling, terminations and
    support parts. Plan fine-pitch escape before surrounding placement.
@@ -69,8 +75,13 @@ state that independent review has not occurred.
 6. Serialize native editor use. The executor obtains exact human approval via
    the existing tool; then inspect fresh receipts and PNGs, update inventory,
    and revisit the floorplan when constraints or congestion conflict.
+   Have the planner call `pcb_prepare_next_placement` for one remaining mission
+   target, execute its exact proposal, and call `pcb_placement_status` after
+   readback. Repeat until actual expected placement coverage is complete.
 7. Complete inventory and routing review separately; request separate operator
-   saving if needed. In-memory placement is not a persisted board.
+   saving through the executor's `pcb_prepare_save` and `pcb_save_revision`.
+   Inspect `pcb_save_status`; in-memory placement is not persistence and Save
+   success is not automatic reopen verification.
 
 ## Visual and routing gates
 

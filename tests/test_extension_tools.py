@@ -23,10 +23,11 @@ function harness({ supported = true, answer = null, imageFailure = false } = {})
         },
         run: async (request) => {
             requests.push(request);
-            return request.action === "describe"
+            return ["describe", "describe-save"].includes(request.action)
                 ? { status: "prepared", summary: "R1 (10,10) -> (12,12), 90 degrees",
                     working_board: "working.brd", warning: "Memory only", visual }
-                : { status: request.action === "apply" ? "applied" : "observed", visual };
+                : { status: request.action === "apply" ? "applied" :
+                    request.action === "apply-save" ? "saved" : "observed", visual };
         },
         imageResult: async () => {
             if (imageFailure) throw new Error("Image unavailable");
@@ -47,6 +48,15 @@ h = harness({ answer: `APPLY ${digest}` });
 assert.equal((await h.apply.handler({ ...args, confirmation: `APPLY ${digest}` })).resultType, "failure");
 assert.equal(h.prompts.length, 0);
 assert.equal(h.requests.length, 0);
+h = harness({ answer: `APPLY ${digest}` });
+let save = h.tools.find(t => t.name === "pcb_save_revision");
+assert.equal((await save.handler(args)).resultType, "denied");
+assert.equal(h.requests.some(r => r.action === "apply-save"), false);
+h = harness({ answer: `SAVE ${digest}` });
+save = h.tools.find(t => t.name === "pcb_save_revision");
+assert.equal((await save.handler(args)).resultType, "success");
+assert.equal(h.requests[1].action, "apply-save");
+assert.equal(h.prompts[0].options.minLength, 69);
 h = harness({ answer: "yes" });
 assert.equal((await h.apply.handler(args)).resultType, "denied");
 assert.equal(h.requests.some(r => r.action === "apply"), false);

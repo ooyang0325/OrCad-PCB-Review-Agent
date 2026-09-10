@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -19,12 +20,13 @@ class FakeActions:
         self.root = root
         self.calls = []
         self.applied = set()
+        self.saved = set()
         self.visual = {"observation_id": "b" * 32, "image_path": str(root / "fixture.png")}
 
     def dispatch(self, request):
         self.calls.append(request)
         action = request["action"]
-        if action == "describe":
+        if action in {"describe", "describe-save"}:
             return {
                 "status": "prepared", "summary": "R1: (10, 10) -> (12, 12), 90 degrees",
                 "working_board": str(self.root / "working.brd"),
@@ -35,6 +37,11 @@ class FakeActions:
                 return {"status": "error", "error": "Proposal approval was already consumed."}
             self.applied.add(request["proposal"])
             return {"status": "applied", "visual": self.visual, "receipt": {"status": "applied"}}
+        if action == "apply-save":
+            if request["proposal"] in self.saved:
+                return {"status": "error", "error": "Save approval was already consumed."}
+            self.saved.add(request["proposal"])
+            return {"status": "saved", "visual": self.visual, "receipt": {"status": "saved"}, "reopened": False}
         if action == "sessions":
             return {"status": "listed", "sessions": []}
         return {"status": "observed", "visual": self.visual, "scene_native": "OPA-FIXTURE-1;opaque"}
@@ -64,6 +71,8 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
                 "pcb_sessions", "pcb_inspect", "pcb_prepare_placement", "pcb_apply_placement",
                 "pcb_execution_status", "pcb_inspection_status", "pcb_reference_catalog",
                 "pcb_reference_search", "pcb_reference_page", "pcb_reference_rule",
+                "pcb_plan_placement", "pcb_placement_status", "pcb_prepare_next_placement",
+                "pcb_prepare_save", "pcb_save_revision", "pcb_save_status",
             })
             apply = next(tool for tool in tools if tool.name == "pcb_apply_placement")
             self.assertEqual(set(apply.input_schema["properties"]), {"session", "proposal"})
@@ -87,7 +96,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(result.is_error)
             self.assertEqual(result.structured_content["sessions"], [])
             self.assertTrue(result.structured_content["capabilities"]["declaration_only"])
-            self.assertFalse(result.structured_content["capabilities"]["initial_component_placement"])
+            self.assertEqual(result.structured_content["capabilities"]["initial_placement_model"], "managed-board-v1")
 
     async def test_missing_elicitation_never_applies_in_either_protocol_mode(self):
         from mcp import Client, MCPError
@@ -122,6 +131,36 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result.is_error)
         self.assertEqual(prompts, [])
         self.assertEqual(self.actions.calls, [])
+
+    async def test_save_requires_separate_human_input_and_is_disabled_by_default(self):
+        from mcp import Client
+        from mcp.types import ElicitResult
+        from orcad_placement_agent.mcp_server import create_server
+
+        prompts = []
+
+        async def callback(_context, params):
+            prompts.append(params.message)
+            return ElicitResult(action="accept", content={"confirmation": f"SAVE {PROPOSAL}"})
+
+        disabled = create_server(lambda: self.actions, image_reader=lambda _a, _v: self.png)
+        async with Client(disabled, elicitation_callback=callback) as client:
+            result = await client.call_tool("pcb_save_revision", {"session": "board-fixture", "proposal": PROPOSAL})
+            self.assertTrue(result.is_error)
+        self.assertEqual(prompts, [])
+        self.assertEqual(self.actions.calls, [])
+        async with Client(self.server, elicitation_callback=callback) as client:
+            tools = (await client.list_tools()).tools
+            save = next(tool for tool in tools if tool.name == "pcb_save_revision")
+            self.assertEqual(set(save.input_schema["properties"]), {"session", "proposal"})
+            result = await client.call_tool("pcb_save_revision", {"session": "board-fixture", "proposal": PROPOSAL})
+            self.assertFalse(result.is_error)
+            self.assertEqual(result.structured_content["status"], "saved")
+            self.assertFalse(result.structured_content["reopened"])
+        self.assertEqual(len(prompts), 1)
+        self.assertIn(f"SAVE {PROPOSAL}", prompts[0])
+        self.assertFalse(self.actions.applied)
+        self.assertEqual(self.actions.saved, {PROPOSAL})
 
     async def test_decline_cancel_and_wrong_answers_never_apply(self):
         from mcp import Client
@@ -241,10 +280,61 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             cwd=self.temp.name, env=environment,
         )
         async with Client(parameters, mode="legacy", read_timeout_seconds=15) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 10)
+            self.assertEqual(len((await client.list_tools()).tools), 16)
             result = await client.call_tool("pcb_reference_catalog", {})
             self.assertFalse(result.is_error)
             self.assertEqual(result.structured_content["data"]["bundled"]["card_count"], 36)
+
+    async def test_zero_placed_mission_and_separate_save_through_real_mcp_with_fake_editor(self):
+        from mcp import Client
+        from mcp.types import ElicitResult
+        from orcad_placement_agent.agent_tools import AgentActions
+        from orcad_placement_agent.mcp_server import create_server
+        from tests.test_mission_actions import FakeManagedEditor
+
+        root = Path(self.temp.name)
+        board_root = root / "board-loop"
+        board_root.mkdir()
+        editor = FakeManagedEditor(board_root)
+        actions = AgentActions(root, session_factory=lambda _path: editor, capture=editor.capture)
+        prompts = []
+
+        async def fake_human(_context, params):
+            match = re.search(r"\b(APPLY|SAVE) ([0-9a-f]{64})\b", params.message)
+            self.assertIsNotNone(match)
+            prompts.append(match[1])
+            return ElicitResult(action="accept", content={"confirmation": match[0]})
+
+        server = create_server(lambda: actions, allow_interactive_writes=True,
+                               image_reader=lambda _a, visual: Path(visual["image_path"]).read_bytes())
+        async with Client(server, elicitation_callback=fake_human) as client:
+            result = await client.call_tool("pcb_plan_placement", {
+                "session": "board-loop",
+                "requirements_json": json.dumps({"expected_refdes": ["U1", "U2", "R1"],
+                                                  "grid_mm": "1", "clearance_mm": "0.5"}),
+            })
+            self.assertFalse(result.is_error)
+            mission = result.structured_content["mission"]
+            for _ in range(3):
+                result = await client.call_tool("pcb_prepare_next_placement", {
+                    "session": "board-loop", "mission": mission,
+                })
+                self.assertFalse(result.is_error)
+                proposal = result.structured_content["proposal_sha256"]
+                result = await client.call_tool("pcb_apply_placement", {"session": "board-loop", "proposal": proposal})
+                self.assertFalse(result.is_error)
+                self.assertEqual(result.structured_content["status"], "applied")
+            result = await client.call_tool("pcb_placement_status", {"session": "board-loop", "mission": mission})
+            self.assertTrue(result.structured_content["progress"]["placement"]["complete"])
+            self.assertEqual(result.structured_content["progress"]["routing"]["verification"], "unverified")
+            result = await client.call_tool("pcb_prepare_save", {"session": "board-loop"})
+            proposal = result.structured_content["proposal_sha256"]
+            result = await client.call_tool("pcb_save_revision", {"session": "board-loop", "proposal": proposal})
+            self.assertFalse(result.is_error)
+            self.assertEqual(result.structured_content["status"], "saved")
+            self.assertFalse(result.structured_content["reopened"])
+        self.assertEqual(prompts, ["APPLY", "APPLY", "APPLY", "SAVE"])
+        self.assertEqual([request.operation for request in editor.requests], ["apply", "apply", "apply", "save"])
 
 
 if __name__ == "__main__":

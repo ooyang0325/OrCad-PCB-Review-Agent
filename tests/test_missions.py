@@ -539,7 +539,7 @@ class MissionTests(unittest.TestCase):
         with self.assertRaises(MissionError):
             plan_mission(board, requirements(board))
         board = snapshot([component("U1")], outline=("0", "0", "999999999", "999999999"))
-        mission = plan_mission(board, requirements(board, grid_mm="0.000000001"))
+        mission = plan_mission(board, requirements(board, grid_mm="0.0001"))
         self.assertIn("search_limit", codes(mission))
         self.assertEqual(mission["targets"], [])
         self.assertEqual(mission["evidence"]["search"]["candidate_evaluations"], 0)
@@ -549,6 +549,20 @@ class MissionTests(unittest.TestCase):
         ])])
         with self.assertRaises(MissionError):
             plan_mission(board, requirements(board))
+
+    def test_grid_and_anchor_poses_must_be_native_dbu_representable(self):
+        board = snapshot([component("U1")])
+        for grid in ("0.00015", "0.00005", "0.000000001"):
+            with self.subTest(grid=grid), self.assertRaises(MissionError):
+                plan_mission(board, requirements(board, grid_mm=grid))
+        anchor = {"refdes": "U1", "kind": "mechanical-interface",
+                  "x": "10.00005", "y": "10.00005", "angle": "0"}
+        with self.assertRaises(MissionError):
+            plan_mission(board, requirements(board, grid_mm="0.0001", anchors=[anchor]))
+        anchor.update(x="10.0001", y="10.0001")
+        plan = plan_mission(board, requirements(board, grid_mm="0.0001", anchors=[anchor]))
+        self.assertEqual(plan["status"], "ready")
+        self.assertEqual(plan["targets"][0]["x"], "10.0001")
 
     def test_many_collisions_have_bounded_diagnoses_and_remain_reconcilable(self):
         board = snapshot([component(f"U{index}", x="3", y="3", placed=True) for index in range(80)])

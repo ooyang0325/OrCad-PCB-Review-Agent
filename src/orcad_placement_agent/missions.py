@@ -12,7 +12,9 @@ Requirements (unknown keys/types are errors; missing inventories are blockers):
 * expected_refdes: required, nonempty unique list of logical reference names.
 * excluded_refdes: optional unique DNP list, disjoint from expected_refdes.
   Native inventory must equal their union. Physically placed DNPs block planning.
-* grid_mm: required positive plain-decimal string; origin lattice is (0, 0).
+* grid_mm: required positive plain-decimal string, a multiple of the managed
+  model's 0.0001 mm DBU; origin lattice is (0, 0). Targets are never rounded
+  after geometry checks or mission approval.
 * clearance_mm: required nonnegative plain-decimal string. This is the operator's
   geometric AABB spacing, NOT a derived electrical/safety clearance. The spacing
   applies to the keepin boundary, keepouts, reservations, and other footprints.
@@ -238,6 +240,8 @@ def _requirements(value):
     grid, clearance = _decimal(value["grid_mm"]), _decimal(value["clearance_mm"])
     if grid <= 0 or clearance < 0:
         raise MissionError("Supply positive grid_mm and nonnegative clearance_mm.")
+    if grid % Decimal("0.0001"):
+        raise MissionError("grid_mm must be a multiple of the managed native 0.0001 mm DBU.")
     result = {
         "expected_refdes": expected, "excluded_refdes": excluded,
         "grid_mm": _text(grid), "clearance_mm": _text(clearance),

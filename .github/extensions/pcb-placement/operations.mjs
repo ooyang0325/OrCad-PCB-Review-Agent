@@ -31,7 +31,11 @@ function requireFields(args, fields) {
 export function createPlacementTools({ run, requestInput, canPrompt, imageResult }) {
     function display(value) {
         return JSON.stringify(value, (_key, item) => {
-            if (typeof item === "string" && item.startsWith("OPA-FIXTURE-1;")) {
+            if (Array.isArray(item) && item.length === 3 && item[0] === "scene-part") {
+                return ["scene-part", item[1], "Opaque scene omitted; use the persisted receipt."];
+            }
+            if (typeof item === "string" &&
+                (item.startsWith("OPA-FIXTURE-1;") || item.startsWith("OPA-BOARD-1;"))) {
                 return {
                     opaque_scene_omitted_from_display: true,
                     instruction: "Use the persisted native receipt for complete machine-readable scene data.",
@@ -91,11 +95,25 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
         tool("pcb_sessions",
             "List recorded managed PCB sessions and declared backend capabilities. Neither proves live readiness; do not select an unrelated session.",
             schema({}), "sessions", []),
+        tool("pcb_plan_placement",
+            "Plan all required components from a fresh managed-board-v1 native inventory, explicit design requirements JSON, and actual PNG. Requires expected_refdes, clearance_mm and grid_mm; does not apply or approve.",
+            schema({
+                session: sessionProperty,
+                requirements_json: { type: "string", minLength: 2, maxLength: 131072 },
+            }), "mission-plan", ["session", "requirements_json"]),
+        tool("pcb_placement_status",
+            "Inspect fresh native placement coverage and routing screening for the exact stored mission, without editing.",
+            schema({ session: sessionProperty, mission: { type: "string", pattern: "^[0-9a-f]{32}$" } }),
+            "mission-status", ["session", "mission"]),
+        tool("pcb_prepare_next_placement",
+            "Prepare the next unplaced mission component using fresh state and an actual PNG. Human approval is still required separately for this exact proposal.",
+            schema({ session: sessionProperty, mission: { type: "string", pattern: "^[0-9a-f]{32}$" } }),
+            "mission-next", ["session", "mission"]),
         tool("pcb_inspect",
             "Capture only the bound Cadence window and return its PNG plus fresh before/after snapshots. Visually inspect this image; pixels alone do not prove DRC or electrical correctness.",
             schema({ session: sessionProperty }), "inspect", ["session"]),
         tool("pcb_prepare_placement",
-            "Prepare one exact pose for an already-placed fixture component, with current native image and snapshot evidence. Does not import a design, initially place an unplaced symbol, move, or approve anything. Targets are absolute millimeters and 0/90/180/270 degrees about the component origin.",
+            "Prepare one exact supported pose, including an unplaced component in a managed-board-v1 session, with current native PNG and snapshot evidence. Does not import, load libraries, place, move or approve. Targets are absolute millimeters and orthogonal degrees about the component origin.",
             schema({
                 session: sessionProperty,
                 refdes: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_]{0,30}$" },
@@ -134,9 +152,9 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
             }
         },
     });
-    tools.push({
-        name: "pcb_apply_placement",
-        description: "Ask the human through an interactive UI to approve one exact visually grounded proposal, then apply it in memory and return native outcome plus post-image. No model-supplied confirmation, auto-approval, arbitrary SKILL, or implicit save.",
+    function approvedTool(name, description, verb, describeAction, applyAction) {
+        return {
+        name, description,
         parameters: schema({ session: sessionProperty, proposal: proposalProperty }),
         handler: async (args) => {
             try {
@@ -146,40 +164,54 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
                         resultType: "denied",
                         textResultForLlm: JSON.stringify({
                             status: "denied", dispatched: false,
-                            reason: "Placement needs interactive mode and human UI support. Autopilot/unknown modes are refused; no native command was sent.",
+                            reason: "Writes need interactive mode and human UI support. Autopilot/unknown modes are refused; no native command was sent.",
                         }),
                     };
                 }
-                const description = await run({ action: "describe", ...args });
+                const description = await run({ action: describeAction, ...args });
                 if (description.status !== "prepared") return await render(description);
-                const expected = `APPLY ${args.proposal}`;
+                const expected = `${verb} ${args.proposal}`;
                 const answer = await requestInput(
                     `${description.summary}\nBoard copy: ${description.working_board}\n` +
                     `Visual observation: ${description.visual.observation_id}\n` +
                     `${description.warning}\n\nType ${expected} to approve exactly this proposal. ` +
                     "Cancel or leave blank to keep the board unchanged.",
-                    { title: "Exact placement approval", minLength: 70, maxLength: 70 },
+                    { title: `Exact ${verb} approval`, minLength: expected.length, maxLength: expected.length },
                 );
                 if (answer !== expected || !await canPrompt()) {
                     return {
                         resultType: "denied",
                         textResultForLlm: JSON.stringify({
                             status: "denied", dispatched: false,
-                            reason: "Exact approval was not supplied, or the session no longer permits interactive approval. No Apply was sent.",
+                            reason: "Exact approval was not supplied, or the session no longer permits interactive approval. Nothing was sent.",
                         }),
                     };
                 }
-                return await render(await run({ action: "apply", ...args, confirmation: answer }));
+                return await render(await run({ action: applyAction, ...args, confirmation: answer }));
             } catch (error) {
                 return {
                     resultType: "failure",
                     textResultForLlm: JSON.stringify({
                         status: "error", error: error.message,
-                        warning: "Do not infer rollback or retry. Query this proposal's execution status if approval was already submitted.",
+                        warning: "Do not infer rollback or retry. Query this proposal's placement/save status if approval was already submitted.",
                     }),
                 };
             }
         },
-    });
+        };
+    }
+    tools.push(approvedTool("pcb_apply_placement",
+        "Request exact human approval of a visually grounded placement, then apply once in memory. No model confirmation, automatic approval, arbitrary SKILL, or implicit save.",
+        "APPLY", "describe", "apply"));
+    tools.push(tool("pcb_prepare_save",
+        "Prepare a visually bound new-revision save proposal. No Save or approval occurs.",
+        schema({ session: sessionProperty }), "prepare-save", ["session"]));
+    tools.push(tool("pcb_save_status",
+        "Read or reconcile one exact Save outcome without resending. A saved revision is distinct from reopen verification.",
+        schema({ session: sessionProperty, proposal: proposalProperty }),
+        "save-status", ["session", "proposal"]));
+    tools.push(approvedTool("pcb_save_revision",
+        "Request separate exact human SAVE approval and save one new revision. Never overwrite the source; no automatic reopen.",
+        "SAVE", "describe-save", "apply-save"));
     return tools;
 }
