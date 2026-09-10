@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from orcad_placement_agent.cli import main
 from orcad_placement_agent.knowledge import (
@@ -171,6 +171,25 @@ class KnowledgeTests(unittest.TestCase):
 
 
 class RealPDFExtractionTests(unittest.TestCase):
+    def test_normalized_page_size_is_also_bounded(self):
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("Optional knowledge extra is not installed.")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "original.pdf"
+            path.write_bytes(b"stubbed original PDF")
+            reader = Mock(is_encrypted=False, metadata={})
+            reader.pages = [Mock(extract_text=Mock(return_value="\ufb03" * 5))]
+            with (
+                patch("pypdf.PdfReader", return_value=reader),
+                patch("orcad_placement_agent.knowledge.MAX_PAGE_CHARACTERS", 10),
+            ):
+                result = extract_pdf(path)
+            self.assertEqual(result.pages, ())
+            self.assertEqual(result.status, "no_text")
+            self.assertIn("normalized text exceeds", result.notices[0])
+
     def test_original_pdf_text_and_empty_page_are_extracted(self):
         try:
             from pypdf import PdfWriter

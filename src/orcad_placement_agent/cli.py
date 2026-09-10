@@ -20,6 +20,7 @@ from .proposals import approve_and_apply, load_proposal, propose, proposal_summa
 from .session import Session, SessionError, stage_session
 from .transport import IndeterminateDelivery, TransportError, WindowsAPI
 from . import knowledge
+from .advisory import TOPIC_QUERIES, build_context
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -85,9 +86,36 @@ def main(argv: list[str] | None = None) -> int:
             sub.add_argument("--page", type=int, required=True, dest="page_number")
             sub.add_argument("--offset", type=int, default=0)
             sub.add_argument("--characters", type=int, default=1500)
+    context = commands.add_parser(
+        "agent-context", help="Prepare a local evidence packet for read-only PCB expert agents."
+    )
+    context.add_argument("--goal", required=True)
+    context.add_argument("--database", type=Path, default=knowledge.DEFAULT_DATABASE)
+    context.add_argument("--topic", action="append", choices=tuple(TOPIC_QUERIES))
+    context.add_argument("--snapshot", type=Path, help="Optional saved snapshot receipt JSON; never a .brd.")
+    context.add_argument("--output-directory", type=Path, default=Path(".runtime") / "advisory")
+    context.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "agent-context":
+            path, context = build_context(
+                args.goal, args.database,
+                topics=tuple(args.topic) if args.topic else ("placement", "decoupling", "return-paths"),
+                snapshot=args.snapshot, output_directory=args.output_directory,
+            )
+            if args.json:
+                print(json.dumps({
+                    "path": str(path), "evidence_candidates": len(context["evidence"]),
+                    "authority": context["authority"],
+                }, indent=2))
+            else:
+                cwd = Path.cwd().resolve()
+                display_path = path.relative_to(cwd) if path.is_relative_to(cwd) else path
+                print(f"Advisory context: {display_path}")
+                print(f"Evidence candidates: {len(context['evidence'])}; no board or model operation was performed.")
+                print("Open this packet with pcb-placement-planner, then pcb-layout-reviewer.")
+            return 0
         if args.command == "knowledge":
             return _knowledge_command(args)
         if args.command == "editors":

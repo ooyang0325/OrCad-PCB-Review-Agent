@@ -91,6 +91,9 @@ def extract_pdf(path: Path) -> ExtractedDocument:
                     continue
                 text = re.sub(r"(?<=\w)-[ \t]*\r?\n[ \t]*(?=\w)", "", text)
                 text = " ".join(unicodedata.normalize("NFKC", text).replace("\x00", " ").split())
+                if len(text) > MAX_PAGE_CHARACTERS:
+                    notices.append(f"PDF page {page_number}: normalized text exceeds the page limit; not indexed.")
+                    continue
                 if text:
                     pages.append((page_number, text))
                 else:

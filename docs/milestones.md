@@ -9,6 +9,8 @@ These are development gates, not dates or GitHub milestones.
 | M2 | Deterministic proposals and approval | Exact proposals with explicit approval and stale-scene rejection | Proposal flow ready; mutation-dependent cases pending approval |
 | M3 | Transactional placement | Approved movement, DRC rollback, accurate readback, and native Undo | Handlers implemented; native acceptance awaiting approval |
 | M4 | Explicit persistence and handoff | New-revision save/reopen, source preservation, and documented recovery | Save handler implemented; native acceptance awaiting approval |
+| M5 | Local PCB reference grounding | Local extraction/search with page citations, freshness and coverage notices | Complete |
+| M6 | Advisory expert agents | Read-only planner/reviewer profiles and bounded, citation-bearing context packets | Complete for Copilot-profile advisory workflow |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.
@@ -34,3 +36,16 @@ geometry must be reported, never silently treated as safe.
 Apply changes memory only. Saving a new revision requires a separate request.
 No operation may overwrite a source board. Lost completion feedback is an
 indeterminate outcome, not a reason to replay a move.
+
+The user requested moving to agent expertise while native mutation approvals
+remain outstanding. M5/M6 are an independent advisory track and do not bypass
+M2-M4. They add no automatic Apply, Save, model-service credentials, or native
+support for arbitrary production boards. See [the agent workflow](agents.md)
+and [the original PCB reasoning rubric](pcb-expertise.md).
+
+The initial local library catalog contains 40 PDFs and 5,663 indexed text pages
+from 37 documents. Two PDFs are encrypted and one has no extractable text;
+partially extracted sources include page-level notices. No OCR or model
+training is claimed. Planner/reviewer behavior has been exercised against a
+real citation packet, but profile discovery depends on the user's Copilot
+client and is not a separate standalone model service.

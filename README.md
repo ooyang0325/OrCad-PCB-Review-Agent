@@ -63,3 +63,22 @@ supplied PCB books locally and retrieves bounded excerpts with source/PDF-page
 citations. Install it with `pip install -e ".[knowledge]"` using the repository
 virtual environment. It does not upload documents, operate Cadence, or call a
 model provider.
+
+## PCB expert agents
+
+The [advisory workflow](docs/agents.md) provides two read-only Copilot profiles:
+**PCB placement planner** and **PCB layout reviewer**. They use the local
+reference evidence, distinguish board facts from assumptions, and require
+source/PDF-page citations. Neither agent can run shell commands or edit a board.
+
+Prepare their input without starting Cadence or calling a model:
+
+```powershell
+.\.venv\Scripts\python.exe -m orcad_placement_agent agent-context `
+    --goal "Review decoupling placement and return paths" `
+    --topic decoupling --topic return-paths
+```
+
+Give the printed packet path to the planner; then give the same packet and its
+response to the reviewer. This is reference-grounded guidance, not fine-tuning
+or permission to bypass the existing native approval gates.
