@@ -101,6 +101,30 @@ class RoomPlacementTests(unittest.TestCase):
             self.assertIn("immutable_facts_changed", codes(status), change)
             self.assertFalse(status["placement"]["complete"])
 
+    def test_legacy_policy_addition_or_removal_blocks_replanning_without_crashing(self):
+        legacy = snapshot([component("U1"), component("U2")])
+        modern = deepcopy(legacy)
+        modern["design_policy"] = policy()
+        for baseline, current in ((legacy, modern), (modern, legacy)):
+            with self.subTest(policy_initially_present="design_policy" in baseline):
+                mission = plan_mission(baseline, requirements(baseline))
+                current = fresh(current, 2)
+                status = mission_status(current, mission)
+                self.assertIn("immutable_facts_changed", codes(status))
+                self.assertFalse(status["placement"]["complete"])
+                self.assertEqual(next_candidate(current, mission)["status"], "blocked")
+
+    def test_new_contour_fields_on_a_legacy_mission_require_replanning(self):
+        legacy = snapshot([component("U1")])
+        mission = plan_mission(legacy, requirements(legacy))
+        modern = deepcopy(legacy)
+        contour = {"vertices": [["0", "0"], ["16", "0"], ["16", "12"], ["0", "12"]], "error_mm": "0"}
+        modern["outline_boundary"] = deepcopy(contour)
+        modern["keepin_boundary"] = deepcopy(contour)
+        current = fresh(modern, 2)
+        self.assertIn("immutable_facts_changed", codes(mission_status(current, mission)))
+        self.assertEqual(next_candidate(current, mission)["status"], "blocked")
+
     def test_impossible_room_never_leaks_a_partial_target_set(self):
         board = self.board(bounds=("8", "1", "9", "2"))
         result = plan_mission(board, requirements(board))

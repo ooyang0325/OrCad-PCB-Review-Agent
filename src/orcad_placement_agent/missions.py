@@ -901,7 +901,9 @@ def _status(board, mission, baseline, requirements):
         blockers.append(_diagnosis(
             "immutable_facts_changed", "Native inventory, footprints, pins/nets, flags or board constraints changed.",
         ))
-    changed = any(board[key] != baseline[key] for key in board if key not in ("snapshot_id", "scene_digest"))
+    dynamic_keys = {"snapshot_id", "scene_digest"}
+    changed = ({key: value for key, value in board.items() if key not in dynamic_keys}
+               != {key: value for key, value in baseline.items() if key not in dynamic_keys})
     freshness_ok = True
     if board["snapshot_id"] == baseline["snapshot_id"] and (
         changed or board["scene_digest"] != baseline["scene_digest"]

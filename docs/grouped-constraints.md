@@ -60,6 +60,9 @@ Changing a Cset value, group membership, ROOM tag or room drawing invalidates
 the mission even if component positions have not changed. Legacy snapshots
 without policy records remain supported; partial policy sections cannot
 silently fall back to legacy behavior.
+If an upgraded reader adds policy/contour facts to an older mission, status
+reports changed immutable facts and requires a fresh plan. Added or removed
+metadata must not crash reconciliation or be ignored to keep an old plan running.
 
 ## The reported howto session
 
