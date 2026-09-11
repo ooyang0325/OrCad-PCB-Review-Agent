@@ -11,6 +11,12 @@ containment, disjoint-empty geometry and partial overlap. Source and
 working-board bytes and pre/post native scene were
 unchanged during those checks.
 
+Review also identified that equal legacy/design-outline bounding boxes did
+not establish equal nonrectangular geometry. Both outlines must now match
+complete native line/arc identities, normalized for traversal direction.
+Read-only native cases passed for reversed equivalent contours and for
+rejecting different concavities or arc centers with identical extents.
+
 The provided `design\howto_agent_placement\allegro\howto.brd` was then copied
 to a separate staged directory and opened **read-only**, not edited in place.
 An outline-only native report successfully read **214 outline vertices and

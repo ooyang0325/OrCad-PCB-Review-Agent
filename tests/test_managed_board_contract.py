@@ -200,6 +200,17 @@ class ManagedBoardContractTests(unittest.TestCase):
         self.assertNotIn("->area", check)
         self.assertNotIn("->bBox", check)
 
+    def test_legacy_outline_must_match_complete_line_and_arc_geometry(self):
+        read = self.procedures["opaManagedReadFrame"]
+        self.assertIn('opaManagedBoundaryIdentity(caddr(assoc("legacy-outline" common)))', read)
+        self.assertIn('opaManagedBoundaryIdentity(caddr(assoc("outline" common)))', read)
+        identity = self.procedures["opaManagedBoundaryIdentity"]
+        self.assertIn("opaSortedData(list(nth(1 edge) nth(2 edge)))", identity)
+        self.assertIn("then nth(4 edge) else !nth(4 edge)", identity)
+        self.assertIn('list("arc" endpoints nth(3 edge) clockwise nth(5 edge))', identity)
+        self.assertNotIn("nth(3 geometry)", identity)
+        self.assertNotIn("nth(6 geometry)", identity)
+
     def test_arc_sampling_is_bounded_and_does_not_treat_chords_as_exact(self):
         arc = self.procedures["opaManagedArcPoints"]
         self.assertIn("theta = abs(atan2(cross dot))", arc)

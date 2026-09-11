@@ -108,3 +108,9 @@ approval and separate Save authorization remain unchanged. A board rejected
 for through-hole pads, missing footprints, unsupported text or other geometry
 does not become fully supported merely because its outline is now supported.
 Do not simplify or discard design objects to force acceptance.
+
+If both `DESIGN_OUTLINE` and the legacy `OUTLINE` exist, their complete native
+edge geometry must agree, not merely their extents. Comparison ignores traversal
+order/direction and accounts for arc centers and clockwise direction. Different
+edge segmentation is conservatively rejected even if the shapes might be
+geometrically equivalent; it is not silently treated as one authoritative shape.

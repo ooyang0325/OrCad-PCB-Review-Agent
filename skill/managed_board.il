@@ -762,6 +762,22 @@ procedure(opaManagedBoundaryPoly(object)
     )
 )
 
+procedure(opaManagedBoundaryIdentity(geometry)
+    let((rows endpoints clockwise)
+        opaRequire(length(nth(4 geometry)) >= 2 "Boundary lacks complete native edges.")
+        foreach(edge nth(4 geometry)
+            endpoints = opaSortedData(list(nth(1 edge) nth(2 edge)))
+            if(car(edge) == "arc" then
+                clockwise = if(equal(nth(1 edge) car(endpoints))
+                    then nth(4 edge) else !nth(4 edge))
+                rows = cons(list("arc" endpoints nth(3 edge) clockwise nth(5 edge)) rows)
+            else
+                opaRequire(car(edge) == "line" "Unsupported native boundary edge identity.")
+                rows = cons(list("line" endpoints) rows)))
+        opaSortedData(rows)
+    )
+)
+
 procedure(opaManagedBoundary(object)
     let((edges endpoints center sx sy ex ey radius data box fill)
         opaManagedObjectGuard(object)
@@ -1128,10 +1144,14 @@ procedure(opaManagedReadFrame()
                         opaRequire(shape->fill "Package keepouts must be filled rectangles.")
                         keepouts = cons(nth(3 geometry) keepouts)
                         common = cons(list("keepout" nth(3 geometry) geometry) common)))))
-        opaRequire(outline && keepin &&
-            (!legacy || equal(legacy outline)) && length(keepouts) <= 256 &&
+        opaRequire(outline && keepin && length(keepouts) <= 256 &&
             length(shapes) == shapeCount + length(boardShapes)
             "Outline, keepin, keepouts or native shape inventory are incomplete.")
+        when(legacy
+            opaRequire(equal(legacy outline) &&
+                equal(opaManagedBoundaryIdentity(caddr(assoc("legacy-outline" common)))
+                    opaManagedBoundaryIdentity(caddr(assoc("outline" common))))
+                "Legacy OUTLINE and DESIGN_OUTLINE differ; full native edge equivalence is required."))
         opaManagedAllFigures(design boardShapes)
         components = sort(components lambda((a b) alphalessp(car(a) car(b))))
         nets = opaManagedNetData(design components)

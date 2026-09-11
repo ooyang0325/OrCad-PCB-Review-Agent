@@ -1,6 +1,6 @@
 ; Bounded outline-only diagnostic. This is NOT a complete placement snapshot.
 procedure(opaOutlineReadOnlyReport(identifier)
-    let((design outline keepin path output rows outcome)
+    let((design outline keepin path output rows outcome legacy)
         opaRequire(opaID(identifier) && !opaDispatchActive && axlOKToProceed()
             "Outline read needs an exact request and idle managed session.")
         opaBoardGuard()
@@ -17,6 +17,12 @@ procedure(opaOutlineReadOnlyReport(identifier)
             progn(
                 outline = opaManagedBoundary(design->designOutline)
                 keepin = opaManagedBoundary(design->keepinPlace)
+                legacy = axlDBGetShapes("BOARD GEOMETRY/OUTLINE")
+                opaRequire(length(legacy) <= 1 "Multiple legacy outline shapes are ambiguous.")
+                when(legacy
+                    opaRequire(equal(opaManagedBoundaryIdentity(opaManagedBoundary(car(legacy)))
+                        opaManagedBoundaryIdentity(outline))
+                        "Legacy OUTLINE and DESIGN_OUTLINE have conflicting native edges."))
                 rows = list(list("boundary-model" "polygon-v1")
                     opaManagedBoxRecord("outline" nth(3 outline))
                     opaManagedBoxRecord("keepin" nth(3 keepin)))
