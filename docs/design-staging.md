@@ -93,6 +93,12 @@ points. Recognized OneDrive/cloud placeholders can be read as ordinary project
 data; unavailable data produces an explicit error rather than an empty copy.
 Case-insensitive destination collisions and invalid Windows filenames are rejected.
 
+On Windows, no-follow attribute handles pin the input ancestor chain during
+resolution, enumeration and copying, denying replacement or concurrent writes.
+An input that resolves to a different location is rejected, not adopted as a
+new project root. A sharing/access error requires closing writers or making
+cloud files available locally; staging does not relax the guard to proceed.
+
 ## Copy limits and integrity
 
 Limits are 10,000 files, 20,000 traversed entries, 32 directory levels,
@@ -105,6 +111,8 @@ are checked during copying, followed by a rescan of included paths. Changed,
 added or removed included files stop publication of `session.json`. A mid-copy
 failure reports its partial artifact directory; that directory is not a usable
 published session. No partial copy is presented as success.
+Verification reads are bounded to the expected file size plus one byte for
+growth detection, including the selected board and copied-file rereads.
 
 Fingerprints record copy preservation, not development history. Use Git for code
 history. Supporting files are a frozen staging-time snapshot and do not

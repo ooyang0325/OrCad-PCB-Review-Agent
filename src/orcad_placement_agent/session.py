@@ -19,8 +19,8 @@ from .transport import (
     CommandTransport, EditorWindow, IndeterminateDelivery, TransportError,
 )
 from .design_copy import (
-    COPY_DIRECTORY, MANIFEST_NAME, DesignCopyError, copy_design, copy_summary,
-    plan_copy, read_manifest, relative_path, resolve_input,
+    COPY_DIRECTORY, MANIFEST_NAME, DesignCopyError, copy_board, copy_design, copy_summary,
+    input_digest, plan_copy, read_manifest, relative_path, resolve_input,
 )
 
 
@@ -83,7 +83,11 @@ def stage_session(
             plan = plan_copy(source, runtime, design_root)
         except (DesignCopyError, OSError) as error:
             raise SessionError(str(error)) from error
-    digest = file_digest(source)
+    source_size = source.stat().st_size
+    try:
+        digest = input_digest(source, source_size)
+    except (DesignCopyError, OSError) as error:
+        raise SessionError(str(error)) from error
     runtime.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix="board-", dir=runtime))
     working = root / "working.brd"
@@ -92,15 +96,15 @@ def stage_session(
         if plan is not None:
             manifest = copy_design(plan, root)
             preserved_board = root / COPY_DIRECTORY / relative_path(manifest["board_relative"])
-            shutil.copyfile(preserved_board, working)
+            copy_board(preserved_board, working, digest)
         else:
-            shutil.copyfile(source, working)
+            copy_board(source, working, digest)
+        if input_digest(source, source_size) != digest:
+            raise DesignCopyError("Source changed during copying; staging is not valid.")
     except (DesignCopyError, OSError) as error:
         raise SessionError(
             f"Design staging failed; no session was published. Partial artifacts: {root}. {error}"
         ) from error
-    if file_digest(working) != digest or file_digest(source) != digest:
-        raise SessionError("Source changed during copying; staging is not valid.")
     for name in names:
         shutil.copyfile(skill / name, root / name)
     nonce = uuid.uuid4().hex

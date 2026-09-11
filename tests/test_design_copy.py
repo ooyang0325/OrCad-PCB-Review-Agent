@@ -219,6 +219,73 @@ class DesignCopyTests(unittest.TestCase):
         root = stage_session(Path(str(self.board).upper()), self.runtime, self.skill)
         self.assertEqual(Session(root).design_copy["board_relative"], "howto.brd")
 
+    def test_resolution_never_adopts_a_redirected_external_root(self):
+        outside = self.root / "outside-resolution"
+        outside.mkdir()
+        outside_board = outside / "howto.brd"
+        outside_board.write_bytes(b"outside the selected folder")
+        original = Path.resolve
+
+        def redirect(path, *args, **kwargs):
+            if path == self.board:
+                return outside_board
+            return original(path, *args, **kwargs)
+
+        with patch.object(Path, "resolve", redirect):
+            with self.assertRaisesRegex(SessionError, "different location"):
+                self.stage()
+        self.assertFalse(self.runtime.exists())
+
+    def test_parent_directory_arguments_are_normalized_without_following_links(self):
+        nested = self.project / "operator"
+        nested.mkdir()
+        with contextlib.chdir(nested):
+            root = stage_session(Path("..") / "howto.brd", self.runtime, self.skill,
+                                 model="managed-board-v1", design_root=Path(".."))
+        self.assertEqual(Session(root).source, self.board)
+        self.assertEqual(Session(root).design_summary()["file_count"], 1)
+
+    @unittest.skipUnless(os.name == "nt", "Windows handle pinning test")
+    def test_windows_resolution_keeps_ancestors_pinned_against_replacement(self):
+        original = Path.resolve
+        attempts = []
+
+        def replace_ancestor(path, *args, **kwargs):
+            if path == self.board and not attempts:
+                attempts.append(True)
+                with self.assertRaises(PermissionError):
+                    self.project.rename(self.root / "moved-project")
+            return original(path, *args, **kwargs)
+
+        with patch.object(Path, "resolve", replace_ancestor):
+            resolved = design_copy.resolve_input(self.board)
+        self.assertEqual(resolved, self.board)
+        self.assertEqual(attempts, [True])
+        self.assertTrue(self.board.is_file())
+
+    def test_verification_reads_only_the_expected_bytes_and_one_growth_probe(self):
+        class EndlessGrowth:
+            count = 0
+
+            def read(self, size):
+                self.count += size
+                return b"x" * size
+
+        reader = EndlessGrowth()
+        with self.assertRaisesRegex(design_copy.DesignCopyError, "grew"):
+            design_copy._bounded_hash(reader, 1)
+        self.assertEqual(reader.count, 2)
+        with self.assertRaisesRegex(design_copy.DesignCopyError, "shorter"):
+            design_copy._bounded_hash(io.BytesIO(b"x"), 2)
+
+    def test_copy_verification_never_uses_unbounded_file_digest(self):
+        destination = self.root / "verified-copy.brd"
+        expected = design_copy._signature(self.board.lstat())
+        with patch.object(design_copy.hashlib, "file_digest", side_effect=AssertionError("Unbounded verification")):
+            copied = design_copy._copy_file(self.board, destination, expected, self.project)
+        self.assertEqual(copied["size"], self.board.stat().st_size)
+        self.assertEqual(destination.read_bytes(), self.board.read_bytes())
+
     def test_changed_manifest_is_not_trusted_by_a_session(self):
         root = self.stage()
         path = root / "design-copy.json"

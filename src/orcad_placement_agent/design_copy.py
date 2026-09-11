@@ -1,6 +1,9 @@
 """Bounded, data-only project snapshots isolated from the trusted controller."""
 
 from dataclasses import dataclass
+from contextlib import contextmanager
+import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import os
@@ -49,12 +52,103 @@ def _signature(info: os.stat_result) -> tuple[int, int, int, int]:
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
 
 
-def resolve_input(path: Path) -> Path:
+class _FileIdInfo(ctypes.Structure):
+    _fields_ = [("volume", ctypes.c_ulonglong), ("identifier", ctypes.c_ubyte * 16)]
+
+
+class _AttributeTagInfo(ctypes.Structure):
+    _fields_ = [("attributes", wintypes.DWORD), ("tag", wintypes.DWORD)]
+
+
+@contextmanager
+def _pinned_path(path: Path):
+    """Hold Windows no-follow, deny-write/delete handles through a path operation."""
     raw = path.expanduser().absolute()
-    for ancestor in (*reversed(raw.parents), raw):
-        if _linked(ancestor.lstat()):
-            raise DesignCopyError(f"Input traverses a symlink, junction, or unsupported reparse point: {ancestor}")
-    return raw.resolve(strict=True)
+    ancestors = (*reversed(raw.parents), raw)
+    identities, handles = [], []
+    kernel = None
+    if os.name == "nt":
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateFileW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+            wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+        ]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.GetFileInformationByHandleEx.argtypes = [
+            wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+        ]
+        kernel.GetFileInformationByHandleEx.restype = wintypes.BOOL
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+    try:
+        for ancestor in ancestors:
+            info = ancestor.lstat()
+            if _linked(info):
+                raise DesignCopyError(f"Input traverses a symlink, junction, or unsupported reparse point: {ancestor}")
+            identity = (info.st_dev, info.st_ino)
+            if kernel is not None:
+                # READ_ATTRIBUTES, SHARE_READ only, OPEN_EXISTING, and
+                # BACKUP_SEMANTICS | OPEN_REPARSE_POINT. No target is followed.
+                handle = kernel.CreateFileW(str(ancestor), 0x80, 0x1, None, 3, 0x02200000, None)
+                if handle in (None, ctypes.c_void_p(-1).value):
+                    raise DesignCopyError(
+                        f"Cannot pin design input ({ctypes.get_last_error()}): {ancestor}. "
+                        "Close writers or make cloud files available locally, then retry."
+                    )
+                handles.append(handle)
+                tag, file_id = _AttributeTagInfo(), _FileIdInfo()
+                if (not kernel.GetFileInformationByHandleEx(handle, 9, ctypes.byref(tag), ctypes.sizeof(tag))
+                        or not kernel.GetFileInformationByHandleEx(handle, 18, ctypes.byref(file_id), ctypes.sizeof(file_id))):
+                    raise DesignCopyError(f"Cannot verify pinned input identity: {ancestor}")
+                linked = stat.S_ISLNK(info.st_mode) or tag.tag & 0x20000000
+                unknown_reparse = tag.attributes & 0x400 and (
+                    tag.tag & 0xFFFF0FFF != 0x9000001A and tag.tag != 0x80000021
+                )
+                actual = (file_id.volume, int.from_bytes(bytes(file_id.identifier), "little"))
+                if linked or unknown_reparse or actual != identity:
+                    raise DesignCopyError(f"Input identity changed while pinning: {ancestor}")
+            identities.append((ancestor, identity))
+        resolved = raw.resolve(strict=True)
+        expected_path = Path(os.path.normpath(raw))
+        if resolved != expected_path:
+            raise DesignCopyError(f"Input resolved to a different location: {raw}")
+        for ancestor, identity in identities:
+            current = ancestor.lstat()
+            if _linked(current) or (current.st_dev, current.st_ino) != identity:
+                raise DesignCopyError(f"Input ancestor changed during resolution: {ancestor}")
+        yield resolved
+        if raw.resolve(strict=True) != resolved:
+            raise DesignCopyError(f"Input path changed during use: {raw}")
+        for ancestor, identity in identities:
+            current = ancestor.lstat()
+            if _linked(current) or (current.st_dev, current.st_ino) != identity:
+                raise DesignCopyError(f"Input ancestor changed during use: {ancestor}")
+    finally:
+        if kernel is not None:
+            for handle in reversed(handles):
+                kernel.CloseHandle(handle)
+
+
+def resolve_input(path: Path) -> Path:
+    with _pinned_path(path) as resolved:
+        return resolved
+
+
+def _bounded_hash(stream, expected_size: int) -> str:
+    if type(expected_size) is not int or not 0 <= expected_size <= MAX_FILE_BYTES:
+        raise DesignCopyError("Invalid file size for bounded verification.")
+    digest, remaining = hashlib.sha256(), expected_size
+    while remaining:
+        data = stream.read(min(1024 * 1024, remaining))
+        if not data:
+            raise DesignCopyError("File became shorter during bounded verification.")
+        if len(data) > remaining:
+            raise DesignCopyError("Reader exceeded the bounded verification request.")
+        digest.update(data)
+        remaining -= len(data)
+    if stream.read(1):
+        raise DesignCopyError("File grew during bounded verification.")
+    return digest.hexdigest()
 
 
 def relative_path(value: str) -> Path:
@@ -111,9 +205,7 @@ def _scan(root: Path, runtime: Path | None) -> tuple[dict, list, list, int]:
         directory, depth = pending.pop()
         if depth > MAX_DEPTH:
             raise DesignCopyError(f"Design tree exceeds {MAX_DEPTH} directory levels.")
-        if _linked(directory.lstat()) or directory.resolve(strict=True) != directory:
-            raise DesignCopyError(f"Linked or redirected design directory: {directory}")
-        with os.scandir(directory) as items:
+        with _pinned_path(directory), os.scandir(directory) as items:
             for entry in items:
                 entries += 1
                 if entries > MAX_ENTRIES:
@@ -173,6 +265,11 @@ def plan_copy(source: Path, runtime: Path, design_root: Path | None = None) -> C
 
 
 def _copy_file(source: Path, destination: Path, expected: tuple, root: Path) -> dict[str, object]:
+    with _pinned_path(source):
+        return _copy_pinned_file(source, destination, expected, root)
+
+
+def _copy_pinned_file(source: Path, destination: Path, expected: tuple, root: Path) -> dict[str, object]:
     before = source.lstat()
     if _linked(before) or not stat.S_ISREG(before.st_mode) or _signature(before) != expected:
         raise DesignCopyError(f"Design file changed before copying: {source}")
@@ -186,7 +283,7 @@ def _copy_file(source: Path, destination: Path, expected: tuple, root: Path) -> 
         if _signature(os.fstat(input_file.fileno())) != expected:
             raise DesignCopyError(f"Design file identity changed while opening: {source}")
         with destination.open("xb") as output:
-            while chunk := input_file.read(1024 * 1024):
+            while chunk := input_file.read(min(1024 * 1024, expected[2] - count + 1)):
                 count += len(chunk)
                 if count > expected[2]:
                     raise DesignCopyError(f"Design file grew during copying: {source}")
@@ -195,7 +292,7 @@ def _copy_file(source: Path, destination: Path, expected: tuple, root: Path) -> 
         if count != expected[2] or _signature(os.fstat(input_file.fileno())) != expected:
             raise DesignCopyError(f"Design file changed during copying: {source}")
         input_file.seek(0)
-        if hashlib.file_digest(input_file, "sha256").hexdigest() != digest.hexdigest():
+        if _bounded_hash(input_file, expected[2]) != digest.hexdigest():
             raise DesignCopyError(f"Design file content changed during staging: {source}")
         if _signature(os.fstat(input_file.fileno())) != expected:
             raise DesignCopyError(f"Design file changed during verification: {source}")
@@ -203,10 +300,31 @@ def _copy_file(source: Path, destination: Path, expected: tuple, root: Path) -> 
     if _linked(after) or _signature(after) != expected or source.resolve(strict=True) != source:
         raise DesignCopyError(f"Design file changed after copying: {source}")
     with destination.open("rb") as stream:
-        if hashlib.file_digest(stream, "sha256").hexdigest() != digest.hexdigest():
+        if _bounded_hash(stream, expected[2]) != digest.hexdigest():
             raise DesignCopyError(f"Copied design file failed verification: {destination}")
     os.utime(destination, ns=(before.st_atime_ns, before.st_mtime_ns))
     return {"size": count, "sha256": digest.hexdigest()}
+
+
+def input_digest(source: Path, expected_size: int) -> str:
+    with _pinned_path(source):
+        with source.open("rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size != expected_size:
+                raise DesignCopyError("Source board changed before bounded verification.")
+            digest = _bounded_hash(stream, expected_size)
+            if _signature(os.fstat(stream.fileno())) != _signature(info):
+                raise DesignCopyError("Source board changed during bounded verification.")
+            return digest
+
+
+def copy_board(source: Path, destination: Path, digest: str) -> None:
+    expected = _signature(source.lstat())
+    if expected[2] > MAX_FILE_BYTES:
+        raise DesignCopyError("Source board exceeds the per-file staging bound.")
+    copied = _copy_file(source, destination, expected, source.parent)
+    if copied["sha256"] != digest:
+        raise DesignCopyError("Board content changed during staging.")
 
 
 def copy_design(plan: CopyPlan, session_root: Path) -> dict[str, object]:
