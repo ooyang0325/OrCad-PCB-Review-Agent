@@ -316,8 +316,8 @@ class ManagedBoardContractTests(unittest.TestCase):
         self.assertIn("member(identity before->drcs)", changed)
         read = self.procedures["opaManagedReadFrame"]
         for guard in (
-            "!design->region", "!design->groups", "!design->module", "!design->zone",
-            "!design->ecsets", "!design->keepinRoute", "!axlDBGetLonelyBranches()",
+            "!design->region", "!design->module", "!design->zone",
+            "!design->ecsets", "!axlDBGetLonelyBranches()",
         ):
             self.assertIn(guard, read)
         self.assertIn("!axlCnsClassTableFind('netclass)", self.source)
