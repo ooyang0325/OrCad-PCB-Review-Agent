@@ -164,6 +164,8 @@ class AgentActions:
                         session = self.session(path.name)
                         entry = {"session": path.name, "working_board": str(session.working)}
                         entry["native_model"] = getattr(session, "model", "fixture")
+                        if getattr(session, "design_copy", None) is not None:
+                            entry["design_copy"] = session.design_summary()
                         if (session.root / "editor.json").is_file():
                             entry["editor"] = asdict(session.editor())
                             entry["binding"] = "Recorded identity; not proof this board is currently open."

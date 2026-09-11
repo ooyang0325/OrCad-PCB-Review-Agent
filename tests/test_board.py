@@ -93,7 +93,8 @@ class ManagedBoardTests(unittest.TestCase):
             legacy = stage_session(source, root / "sessions", skill)
             self.assertEqual(Session(legacy).model, "fixture")
             metadata = json.loads((legacy / "session.json").read_text())
-            self.assertEqual(metadata["schema_version"], 1)
+            self.assertEqual(metadata["schema_version"], 3)
+            self.assertTrue((legacy / "design-data" / "source.brd").is_file())
             with self.assertRaises(SessionError):
                 stage_session(source, root / "sessions", skill, model="arbitrary-evaluation")
 

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import time
@@ -16,6 +17,10 @@ from .protocol import (
 )
 from .transport import (
     CommandTransport, EditorWindow, IndeterminateDelivery, TransportError,
+)
+from .design_copy import (
+    COPY_DIRECTORY, MANIFEST_NAME, DesignCopyError, copy_design, copy_summary,
+    plan_copy, read_manifest, relative_path, resolve_input,
 )
 
 
@@ -49,10 +54,18 @@ def write_json(path: Path, value: dict[str, object]) -> None:
     write_new(path, content)
 
 
-def stage_session(source: Path, runtime: Path, skill: Path, *, model: str = "fixture") -> Path:
+def stage_session(
+    source: Path, runtime: Path, skill: Path, *, model: str = "fixture",
+    design_root: Path | None = None, board_only: bool = False,
+) -> Path:
     if model not in {"fixture", "managed-board-v1"}:
         raise SessionError("Choose the fixture or managed-board-v1 native model.")
-    source = source.expanduser().resolve(strict=True)
+    if board_only and design_root is not None:
+        raise SessionError("--board-only and --design-root cannot be combined.")
+    try:
+        source = resolve_input(source)
+    except (DesignCopyError, OSError) as error:
+        raise SessionError(str(error)) from error
     runtime = runtime.expanduser().resolve()
     if source.suffix.lower() != ".brd" or not source.is_file():
         raise SessionError("An existing source .brd is required.")
@@ -64,11 +77,28 @@ def stage_session(source: Path, runtime: Path, skill: Path, *, model: str = "fix
     for name in names:
         if not (skill / name).is_file():
             raise SessionError(f"Trusted adapter source is unavailable: {name}")
+    plan = None
+    if not board_only:
+        try:
+            plan = plan_copy(source, runtime, design_root)
+        except (DesignCopyError, OSError) as error:
+            raise SessionError(str(error)) from error
     digest = file_digest(source)
     runtime.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix="board-", dir=runtime))
     working = root / "working.brd"
-    shutil.copyfile(source, working)
+    manifest = None
+    try:
+        if plan is not None:
+            manifest = copy_design(plan, root)
+            preserved_board = root / COPY_DIRECTORY / relative_path(manifest["board_relative"])
+            shutil.copyfile(preserved_board, working)
+        else:
+            shutil.copyfile(source, working)
+    except (DesignCopyError, OSError) as error:
+        raise SessionError(
+            f"Design staging failed; no session was published. Partial artifacts: {root}. {error}"
+        ) from error
     if file_digest(working) != digest or file_digest(source) != digest:
         raise SessionError("Source changed during copying; staging is not valid.")
     for name in names:
@@ -92,6 +122,10 @@ def stage_session(source: Path, runtime: Path, skill: Path, *, model: str = "fix
     }
     if model == "managed-board-v1":
         metadata.update({"schema_version": 2, "model": model})
+    if manifest is not None:
+        write_json(root / MANIFEST_NAME, manifest)
+        metadata.update({"schema_version": 3, "model": model,
+                         "design_copy_sha256": file_digest(root / MANIFEST_NAME)})
     write_json(root / "session.json", metadata)
     return root
 
@@ -107,24 +141,45 @@ class Session:
             raise SessionError("Session directory must be ASCII-safe.")
         metadata = self._read_json("session.json")
         fields = {"schema_version", "nonce", "source", "source_sha256", "working"}
+        version = metadata.get("schema_version")
+        bundled = type(version) is int and version == 3
         managed = metadata.get("schema_version") == 2 and metadata.get("model") == "managed-board-v1"
+        extra = {"model", "design_copy_sha256"} if bundled else {"model"} if managed else set()
         if (
-            set(metadata) != fields | ({"model"} if managed else set())
-            or (not managed and metadata.get("schema_version") != 1)
+            set(metadata) != fields | extra or type(version) is not int
+            or (not bundled and not managed and version != 1)
+            or (bundled and (not isinstance(metadata["model"], str)
+                             or metadata["model"] not in {"fixture", "managed-board-v1"}))
             or not all(isinstance(metadata[key], str) for key in
                        ("nonce", "source", "source_sha256", "working"))
         ):
             raise SessionError("Unsupported session metadata.")
-        self.model = "managed-board-v1" if managed else "fixture"
+        self.model = metadata["model"] if bundled else "managed-board-v1" if managed else "fixture"
         self.nonce = identifier(metadata["nonce"])
         self.source = Path(metadata["source"]).resolve(strict=True)
         self.source_digest = metadata["source_sha256"]
+        if re.fullmatch(r"[0-9a-f]{64}", self.source_digest) is None:
+            raise SessionError("Invalid preserved source fingerprint.")
         self.working = Path(metadata["working"]).resolve(strict=True)
         if self.working != self.root / "working.brd" or self.source == self.working:
             raise SessionError("Session source/working-copy boundary is invalid.")
+        self.design_copy = None
+        if bundled:
+            try:
+                self.design_copy = read_manifest(self.root, metadata["design_copy_sha256"])
+                origin = Path(self.design_copy["source_root"]) / relative_path(self.design_copy["board_relative"])
+                selected = next(item for item in self.design_copy["files"]
+                                if item["path"] == self.design_copy["board_relative"])
+                if origin != self.source or selected["sha256"] != self.source_digest:
+                    raise DesignCopyError("The copied project does not match the preserved source board.")
+            except (DesignCopyError, StopIteration) as error:
+                raise SessionError(str(error) or "The staged board is missing from its manifest.") from error
         self.transport = transport if transport is not None else CommandTransport()
         self.clock = clock
         self.sleep = sleep
+
+    def design_summary(self) -> dict[str, object] | None:
+        return copy_summary(self.root, self.design_copy) if self.design_copy is not None else None
 
     def _read_json(self, name: str) -> dict[str, object]:
         path = self.root / name

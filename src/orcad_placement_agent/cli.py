@@ -24,6 +24,7 @@ from .advisory import TOPIC_QUERIES, build_context
 from .resources import asset_directory
 from .installation import CLIENTS, write_configurations
 from .agent_tools import AgentActionError, AgentActions, display_payload
+from .design_copy import DesignCopyError, copy_summary, read_manifest
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,12 +48,18 @@ def main(argv: list[str] | None = None) -> int:
     probe.add_argument("--skill-dir", type=Path, help="Explicit trusted source override; packaged assets are the default.")
     probe.add_argument("--json", action="store_true")
     commands.add_parser("editors", help="List visible classic editor identities; do not select one.")
-    stage = commands.add_parser("stage", help="Copy a source board and trusted adapter into a fresh session.")
+    stage = commands.add_parser("stage", help="Copy a complete design folder and protected working board into a fresh session.")
     stage.add_argument("source", type=Path)
     stage.add_argument("--runtime-dir", type=Path)
     stage.add_argument("--skill-dir", type=Path, help="Explicit trusted source override; packaged assets are the default.")
     stage.add_argument("--model", choices=("fixture", "managed-board-v1"), default="fixture",
                        help="Explicitly select the native model; source boards are always copied.")
+    copy_scope = stage.add_mutually_exclusive_group()
+    copy_scope.add_argument("--design-root", type=Path,
+                            help="Project tree to copy recursively; default is the selected board's containing folder.")
+    copy_scope.add_argument("--board-only", action="store_true",
+                            help="Explicit legacy behavior: copy only the selected .brd, not supporting files.")
+    stage.add_argument("--json", action="store_true", help="Print staged paths, library inventory and exclusions as JSON.")
     attach = commands.add_parser("attach", help="Bind the staged copy to an explicit editor through a read-only handshake.")
     attach.add_argument("--session", type=Path, required=True)
     attach.add_argument("--hwnd", type=lambda value: int(value, 0), required=True)
@@ -184,10 +191,35 @@ def main(argv: list[str] | None = None) -> int:
             root = stage_session(
                 args.source, runtime, args.skill_dir if args.skill_dir is not None else asset_directory("skill"),
                 model=args.model,
+                design_root=args.design_root, board_only=args.board_only,
             )
             bootstrap = json.dumps(str(root / "bootstrap.il"))
+            metadata = json.loads((root / "session.json").read_text(encoding="utf-8"))
+            design = None if args.board_only else copy_summary(
+                root, read_manifest(root, metadata["design_copy_sha256"])
+            )
+            if args.json:
+                print(json.dumps({
+                    "session": str(root), "working_board": str(root / "working.brd"),
+                    "load_command": f"skill load({bootstrap})", "model": args.model,
+                    "copy_mode": "board-only" if design is None else "design-folder",
+                    "design_copy": design, "native_board_operations": False,
+                }, indent=2, ensure_ascii=True))
+                return 0
             print(f"Session: {root}")
             print(f"Open only this copy in the dedicated editor: {root / 'working.brd'}")
+            if design is not None:
+                print(f"Design files: {design['copied_root']}")
+                print(f"Copied {design['file_count']} files ({design['total_bytes']} bytes); excluded {design['excluded_count']} runtime/cache entries.")
+                print(f"Copy inventory and exclusions: {design['manifest']}")
+                for setting, paths in design["library_directories"].items():
+                    for path in paths:
+                        print(f"Copied {setting} candidate (not configured): {path}")
+                for warning in design["warnings"]:
+                    print(f"Warning: {warning}")
+                print("Supporting files copied only; package definitions are not loaded by staging.")
+            else:
+                print("Board-only mode: supporting design files were not copied.")
             print(f"Load the trusted adapter: skill load({bootstrap})")
             print("Then run editors and attach with the explicit HWND and --session path.")
             return 0
@@ -207,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     except IndeterminateDelivery as error:
         print(f"INDETERMINATE: {error}", file=sys.stderr)
         return 3
-    except (ConfigurationError, SessionError, ProtocolError, TransportError, AgentActionError,
+    except (ConfigurationError, SessionError, ProtocolError, TransportError, AgentActionError, DesignCopyError,
             knowledge.KnowledgeError, sqlite3.Error, OSError, json.JSONDecodeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
