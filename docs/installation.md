@@ -31,6 +31,10 @@ After upgrading the matching runtime, stage a fresh copy and load its printed
 bootstrap. Missing embedded package definitions are a separate preparation
 requirement; an older staged bootstrap is not updated automatically.
 
+Version 0.8.0 adds [complete design-folder staging](design-staging.md), including
+supporting project files and local footprint/padstack libraries. The copied
+project is isolated from controller files. Copying is not implicit library loading.
+
 ## 1. Prepare the runtime once
 
 Clone the trusted repository, then run the Python installer with an explicit
@@ -48,7 +52,7 @@ can replace the explicit interpreter path. Existing developers may use the
 repository's `.venv\Scripts\python.exe`.
 
 The installer creates an owned, versioned environment at
-`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.7.0` and generates client
+`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.8.0` and generates client
 snippets inside its `client-configs` directory. It does not change PATH,
 Python 2.7, execution policy, Cadence settings, existing client configuration,
 or any board. Re-running is idempotent for the same installed version; it

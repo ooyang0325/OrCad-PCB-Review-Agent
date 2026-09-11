@@ -49,6 +49,11 @@ reports invalid configuration or an inaccessible path.
 
 ## Native editor safety
 
+For complete design staging, see [design-folder copying](design-staging.md).
+The default includes the selected board's containing folder and nested
+supporting files; controller code remains separate. Save source changes first,
+and do not mistake copied library files for definitions loaded into the editor.
+
 Use a dedicated visible classic PCB Editor session. Do not alter global
 `allegro.ilinit`, vendor installation files, or shared Cadence settings.
 Native Apply and Save handlers are present, but their live acceptance remains

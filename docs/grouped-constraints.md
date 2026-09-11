@@ -94,3 +94,8 @@ Library preparation therefore needs to make the correct definitions available
 in the active staged editor before attachment; saving a library-loaded but
 still-unplaced board is not proof that the definitions will survive reopening.
 This release does not add an automatic library-loading/import operation.
+
+Full-folder [design staging](design-staging.md) now copies local project
+libraries and related files alongside the protected working board. This resolves
+the file-availability part of setup, not the separate native definition-loading
+or geometry-compatibility requirements.

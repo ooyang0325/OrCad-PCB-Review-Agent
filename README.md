@@ -43,6 +43,12 @@ legacy Python installations. See [setup](docs/setup.md).
 
 ## Intended access boundary
 
+The [`stage` command](docs/design-staging.md) copies the complete containing
+design folder, preserving project files and libraries under `design-data`
+alongside an isolated editable `working.brd`. Use `--design-root` for a larger
+project tree or `--board-only` to copy just the board. File copying does not
+implicitly load libraries or change editor settings.
+
 The controller sends bounded requests to a small SKILL adapter in a
 dedicated visible editor holding a disposable board copy. Every change will
 require approval of its exact target pose and current board state. Apply and

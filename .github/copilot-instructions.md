@@ -30,6 +30,11 @@ dependency. Do not replace Python 2.7 or modify global Cadence settings.
   choices that are not specified by the task.
 - Keep credentials, local configuration, and proprietary PCB design files
   out of version control.
+- Full design staging copies into an isolated `design-data` subtree, never over
+  controller files. Preserve relative assets, report exclusions, reject linked
+  escapes and source changes, and keep runtime outputs out of recursive copies.
+  Copied scripts and library-path candidates are data, not permission to execute,
+  configure Cadence, or load footprints. Old board-only sessions remain supported.
 - Keep the supplied `doc` and `pcb_design_book` directories local-only.
   Author project documentation in `docs`; do not redistribute vendor examples
   or libraries.

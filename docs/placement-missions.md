@@ -54,6 +54,12 @@ Open only the printed working copy in a dedicated editor, load its printed
 bootstrap, and attach using that exact session and HWND. Staging does not open
 Cadence, import a schematic, mutate the source, or grant approval.
 
+`stage` now [copies the whole containing design folder](design-staging.md) into
+an isolated `design-data` directory, including libraries and supporting files.
+Use `--design-root` when project libraries are in sibling folders, or
+`--board-only` for the legacy single-file behavior. Copied library directories
+are reported, not automatically configured or loaded into Cadence.
+
 The native snapshot supplies logical placed/unplaced inventory, local footprint
 bounds and pin coordinates, nets, outline, keepin, keepouts and conductor layers.
 General scenes are transmitted in bounded ordered chunks, not truncated into
