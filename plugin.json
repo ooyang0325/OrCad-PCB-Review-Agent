@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "orcad-placement",
-  "version": "0.4.0",
-  "description": "Windows-only Cadence PCB workflows with native images and bundled PCB expertise. Portable installs are read-only by default; native writes remain fixture-scoped.",
+  "version": "0.6.0",
+  "description": "Windows-only Cadence PCB missions with native images and bundled expertise. Read-only by default; experimental native writes require an explicitly supported model and human approval.",
   "author": {
     "name": "oo_yang",
     "url": "https://github.com/ooyang0325"

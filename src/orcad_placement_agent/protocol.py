@@ -11,6 +11,8 @@ from typing import Iterable
 
 
 MAX_BYTES = 1024 * 1024
+# Persisted proposals/results embed receipts and JSON-escape native scene text.
+MAX_METADATA_BYTES = 8 * MAX_BYTES
 MAX_ROWS = 4096
 MAX_FIELD = 8192
 ID_PATTERN = re.compile(r"[0-9a-f]{32}")
@@ -171,7 +173,10 @@ class Receipt:
             raise ProtocolError("Receipt must include an explicit message.")
         records = rows[2:-1]
         allowed = {"board": 2, "units": 4, "version": 2, "component": 9,
-                   "scene": 2, "snapshot": 2, "saved": 2}
+                   "scene": 2, "snapshot": 2, "saved": 2, "scene-part": 3,
+                   "model": 2, "outline": 5, "keepin": 5, "keepout": 5,
+                   "bounds": 6, "pin": 6, "layer": 2, "boundary-model": 2,
+                   "boundary": 5, "boundary-point": 5, "boundary-source": 4}
         for record in records:
             if record[0] not in allowed or len(record) != allowed[record[0]]:
                 raise ProtocolError("Unsupported receipt record.")
@@ -191,8 +196,23 @@ class Receipt:
         return matches[0]
 
     @property
+    def scene(self) -> str:
+        header = self.one("scene")[1]
+        parts = [row for row in self.records if row[0] == "scene-part"]
+        if header.startswith("OPA-BOARD-1;chunks="):
+            count = header.removeprefix("OPA-BOARD-1;chunks=")
+            if not count.isdigit() or not 1 <= int(count) <= 128 or len(parts) != int(count):
+                raise ProtocolError("Incomplete managed-board scene.")
+            if any(row[1] != str(index) or not row[2] for index, row in enumerate(parts)):
+                raise ProtocolError("Scene chunks are missing, duplicated, empty, or out of order.")
+            return "".join(row[2] for row in parts)
+        if parts:
+            raise ProtocolError("Unexpected chunks in a legacy scene.")
+        return header
+
+    @property
     def scene_digest(self) -> str:
-        self.one("scene")
+        self.scene
         return hashlib.sha256(encode_rows(sorted(self.records))).hexdigest()
 
 

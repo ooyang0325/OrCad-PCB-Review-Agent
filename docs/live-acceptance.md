@@ -1,5 +1,98 @@
 # Live acceptance status
 
+## Nonrectangular outline acceptance
+
+Version 0.6.0 adds explicit simple outline/keepin contours to native snapshots
+and placement missions. A separate read-only Cadence 25.1 S050 session passed
+native contour checks for concavities, a notch between four inside corners,
+approximation margins, invalid contours, arc direction/radius and edge-chain
+ordering. Additional native polygon-intersection cases passed for complete
+containment, disjoint-empty geometry and partial overlap. Source and
+working-board bytes and pre/post native scene were
+unchanged during those checks.
+
+Review also identified that equal legacy/design-outline bounding boxes did
+not establish equal nonrectangular geometry. Both outlines must now match
+complete native line/arc identities, normalized for traversal direction.
+Read-only native cases passed for reversed equivalent contours and for
+rejecting different concavities or arc centers with identical extents.
+
+The provided `design\howto_agent_placement\allegro\howto.brd` was then copied
+to a separate staged directory and opened **read-only**, not edited in place.
+An outline-only native report successfully read **214 outline vertices and
+194 keepin vertices**, each carrying a **0.0012 mm** arc approximation margin.
+This exposed and fixed native `atan2` returning a negative semicircle angle
+for signed-zero input. The exported contours passed the Python reader and
+rejected a test rectangle lying in the outline bounding box but outside the
+actual board. A guarded display-only fit and window-only capture showed the
+provided design's nonrectangular boundary.
+
+This is geometry-reader/containment evidence, **not placement acceptance for
+the entire howto design**. Its full managed-board handshake still rejects
+unsupported `groups` before placement. No grouping, footprint, routing or
+other design data was removed to force acceptance. No Apply, Save, source
+overwrite, or write approval was performed. See
+[nonrectangular outline scope](nonrectangular-outlines.md).
+
+## Managed-board mission implementation
+
+The new experimental managed-board-v1 model implements initial placement and
+movement for already-logical components with embedded simple SMT footprints.
+The mission engine computes complete target sets, preserves existing placed
+parts, reserves routing/access regions and reconciles fresh native readback.
+MCP/app tools expose the loop and separately approved new-revision saves.
+Pure and fake-editor tests exercise these interfaces, but are not native proof.
+
+On 2026-09-11 a fresh copy of the original fixture was opened in a dedicated
+25.1 S050 window. Its managed-board handshake and actual before/after PNG
+inspection now succeed. The first live read exposed incorrect assumptions
+that static tests could not detect:
+
+- Saved boards contain Cadence-owned attachments. These are now preserved in
+  the complete scene, not deleted or ignored. Binary exports require `rb` file
+  reads; `string` truncates at NUL. Exported data can be decompressed and differ
+  in length from native stored size, so both sizes and full bytes are recorded.
+- The simple SMT padstack has the legacy pad-suppression flag enabled.
+  The flag is preserved alongside actual pad geometry, rather than rejected.
+- Surface cross-section entries can have a nil layer type and `SURFACE`
+  function. Those entries are retained, including their material data.
+- Ordinary logical components have function instances and function-pin links.
+  Forward/reverse ownership and definition mappings are now checked and modeled.
+- Automatic ratsnests can have `ratsPlaced=t` with `userDefined=nil`. That state
+  is recorded; locked/user-defined scheduling remains unsupported.
+- Ordinary physical pins report fixed against independent pin movement.
+  Component mobility now uses the component/symbol query, which also covers
+  fixed children. R1/R2 are correctly movable and R3 remains fixed.
+- Objects whose property pointer is nil are not sent to a property API that
+  rejects their object type. Nonempty property pointers still require readback.
+
+Six actual read-only native checks passed: all 256 byte values, byte-limit
+rejection, repeated complete attachment reads, parent/pin fixed semantics,
+logical function mappings and the five-entry fixture cross-section. The
+reusable test source is `tests\native\managed_readonly.il`; local reports and
+binary test inputs remain outside Git.
+
+First-symbol creation, pose changes, DRC rollback, Undo and save/reopen still
+require exact interactive human authorization and native acceptance. The
+operator was unavailable when asked to switch from Autopilot to Interactive;
+no Apply or Save was inferred or dispatched. This is not yet a demonstrated
+end-to-end Cadence placement result. See
+[the supported boundary and workflow](placement-missions.md).
+
+To help complete acceptance, keep the dedicated fixture window open, switch
+the chat to **Interactive**, and allow the executor to present a fresh exact
+proposal. The first documented case moves R1 from (10,10)/0 to (12,12)/90 in
+memory only. This is not blanket permission for later cases or Save. A full
+initial-placement test additionally needs a separately prepared fixture with
+logical components present but physical symbols unplaced; the current fixture
+starts with all three symbols placed.
+
+API research used locally installed Cadence engineering notes under
+`share\pcb\examples\skill\DOC\FUNCS` and `DOC\QIR\CHANGE`. Their README warns
+that entries may be inaccurate or unsupported and their version metadata is
+older than 25.1. Documented signatures informed the implementation, but do not
+establish licensed native behavior. Those vendor files are not redistributed.
+
 ## Current status
 
 The previous startup blocker cleared after the user closed the existing

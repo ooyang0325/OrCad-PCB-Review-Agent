@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 
 from . import expertise, knowledge, references
-from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
+from .protocol import MAX_METADATA_BYTES, ProtocolError, Receipt, identifier
 from .proposals import check_snapshot
 from .session import write_json
 from .capabilities import backend_capabilities
@@ -26,12 +26,12 @@ TOPIC_QUERIES = {
 
 
 def _snapshot_context(path: Path) -> dict[str, object]:
-    if path.stat().st_size > MAX_BYTES:
+    if path.stat().st_size > MAX_METADATA_BYTES:
         raise ProtocolError("Snapshot artifact exceeds the size limit.")
     data = json.loads(path.read_text(encoding="utf-8"))
     receipt = Receipt.from_dict(data)
     components = check_snapshot(receipt)
-    return {
+    result = {
         "artifact": str(path.resolve()), "request_id": receipt.request_id,
         "snapshot_id": receipt.one("snapshot")[1], "board": receipt.one("board")[1],
         "units": receipt.one("units")[1], "editor_version": receipt.one("version")[1],
@@ -47,11 +47,23 @@ def _snapshot_context(path: Path) -> dict[str, object]:
             "Do not interpret the native compressed scene as verified electrical design intent.",
         ],
     }
+    if any(row == ("model", "managed-board-v1") for row in receipt.records):
+        from .board import from_receipt
+
+        board = from_receipt(receipt)
+        result["native_model"] = board["model"]
+        result["geometry"] = {key: board[key] for key in (
+            "outline", "keepin", "keepouts", "layers", "outline_boundary", "keepin_boundary",
+        ) if key in board}
+        result["limitations"].append(
+            "Outline/keepin extents are not usable area for nonrectangular boards; use complete contours and their error margins."
+        )
+    return result
 
 
 def _visual_context(path: Path) -> tuple[dict[str, object], Path]:
     path = path.expanduser().resolve(strict=True)
-    if path.stat().st_size > MAX_BYTES:
+    if path.stat().st_size > MAX_METADATA_BYTES:
         raise ProtocolError("Visual metadata exceeds the size limit.")
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("kind") != "pcb-visual-observation":

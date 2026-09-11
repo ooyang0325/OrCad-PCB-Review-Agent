@@ -7,7 +7,7 @@ from setuptools.command.build_py import build_py
 
 
 ASSETS = {
-    "skill": ("probe.il", "protocol.il", "placement.il", "adapter.il"),
+    "skill": ("probe.il", "protocol.il", "placement.il", "managed_board.il", "adapter.il"),
     "fixtures/access-proof": ("create.il", "opa_fixture_device.txt", "README.md"),
 }
 

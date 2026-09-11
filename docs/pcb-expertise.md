@@ -94,8 +94,9 @@ textbook example is not an approved high-voltage isolation rule.
   every linear regulator. Identify topology and transient current paths.
 - The reference index cannot read diagrams without text or perform OCR.
   Missing extraction is missing evidence, not absence of a design concern.
-- A supplied real board remains outside the fixture-only native write model.
-  Advisory reasoning does not expand the editor adapter's supported scope.
+- A supplied board must satisfy its explicitly selected native model. The
+  fixture default remains narrow; managed-board-v1 has separate limits and
+  pending native acceptance. Advisory reasoning does not expand either scope.
 
 ## Optional original-source navigation
 

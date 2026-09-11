@@ -12,7 +12,7 @@ from typing import Callable
 import uuid
 
 from .protocol import (
-    MAX_BYTES, ProtocolError, Receipt, Request, identifier,
+    MAX_BYTES, MAX_METADATA_BYTES, ProtocolError, Receipt, Request, identifier,
 )
 from .transport import (
     CommandTransport, EditorWindow, IndeterminateDelivery, TransportError,
@@ -43,12 +43,15 @@ def write_new(path: Path, content: bytes) -> None:
 
 
 def write_json(path: Path, value: dict[str, object]) -> None:
-    write_new(
-        path, (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
-    )
+    content = (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+    if len(content) > MAX_METADATA_BYTES:
+        raise SessionError("Local metadata exceeds the 8 MiB persistence limit.")
+    write_new(path, content)
 
 
-def stage_session(source: Path, runtime: Path, skill: Path) -> Path:
+def stage_session(source: Path, runtime: Path, skill: Path, *, model: str = "fixture") -> Path:
+    if model not in {"fixture", "managed-board-v1"}:
+        raise SessionError("Choose the fixture or managed-board-v1 native model.")
     source = source.expanduser().resolve(strict=True)
     runtime = runtime.expanduser().resolve()
     if source.suffix.lower() != ".brd" or not source.is_file():
@@ -56,6 +59,8 @@ def stage_session(source: Path, runtime: Path, skill: Path) -> Path:
     if not str(runtime).isascii():
         raise SessionError("The Cadence staging directory must be ASCII-safe.")
     names = ("adapter.il", "protocol.il", "placement.il")
+    if model == "managed-board-v1":
+        names += ("managed_board.il",)
     for name in names:
         if not (skill / name).is_file():
             raise SessionError(f"Trusted adapter source is unavailable: {name}")
@@ -73,15 +78,21 @@ def stage_session(source: Path, runtime: Path, skill: Path) -> Path:
         f"opaRoot = {json.dumps(str(root))}\n"
         f"opaNonce = {json.dumps(nonce)}\n"
         f"opaBoardPath = {json.dumps(str(working))}\n"
+        f"opaBoardModel = {json.dumps(model)}\n"
         f"load({json.dumps(str(root / 'protocol.il'))})\n"
         f"load({json.dumps(str(root / 'placement.il'))})\n"
-        f"load({json.dumps(str(root / 'adapter.il'))})\n"
     )
+    if model == "managed-board-v1":
+        bootstrap += f"load({json.dumps(str(root / 'managed_board.il'))})\n"
+    bootstrap += f"load({json.dumps(str(root / 'adapter.il'))})\n"
     write_new(root / "bootstrap.il", bootstrap.encode("ascii"))
-    write_json(root / "session.json", {
+    metadata = {
         "schema_version": 1, "nonce": nonce, "source": str(source),
         "source_sha256": digest, "working": str(working),
-    })
+    }
+    if model == "managed-board-v1":
+        metadata.update({"schema_version": 2, "model": model})
+    write_json(root / "session.json", metadata)
     return root
 
 
@@ -95,13 +106,16 @@ class Session:
         if not str(self.root).isascii():
             raise SessionError("Session directory must be ASCII-safe.")
         metadata = self._read_json("session.json")
+        fields = {"schema_version", "nonce", "source", "source_sha256", "working"}
+        managed = metadata.get("schema_version") == 2 and metadata.get("model") == "managed-board-v1"
         if (
-            set(metadata) != {"schema_version", "nonce", "source", "source_sha256", "working"}
-            or metadata["schema_version"] != 1
+            set(metadata) != fields | ({"model"} if managed else set())
+            or (not managed and metadata.get("schema_version") != 1)
             or not all(isinstance(metadata[key], str) for key in
                        ("nonce", "source", "source_sha256", "working"))
         ):
             raise SessionError("Unsupported session metadata.")
+        self.model = "managed-board-v1" if managed else "fixture"
         self.nonce = identifier(metadata["nonce"])
         self.source = Path(metadata["source"]).resolve(strict=True)
         self.source_digest = metadata["source_sha256"]
@@ -114,7 +128,7 @@ class Session:
 
     def _read_json(self, name: str) -> dict[str, object]:
         path = self.root / name
-        if path.stat().st_size > MAX_BYTES:
+        if path.stat().st_size > MAX_METADATA_BYTES:
             raise SessionError(f"Oversized local metadata: {name}")
         value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
@@ -145,6 +159,12 @@ class Session:
         observed = Path(receipt.one("board")[1]).resolve()
         if observed != self.working:
             raise SessionError("Handshake returned a different board; binding was refused.")
+        if self.model == "managed-board-v1":
+            from .board import from_receipt
+
+            from_receipt(receipt)
+        elif any(row[0] == "model" for row in receipt.records):
+            raise SessionError("Native board model does not match the staged session.")
         write_json(self.root / "editor.json", asdict(editor))
         return receipt
 

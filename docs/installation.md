@@ -19,8 +19,10 @@ performed by the installer.
   credentials. Never put tokens in plugin manifests or configuration samples.
 
 The plugin starts **read-only by default**: inspection, visual proposals,
-reference search and recovery are available. Native writes remain limited to
-the original synthetic fixture, not arbitrary production boards.
+reference search and recovery are available. The original fixture is the
+default native model. Experimental managed-board-v1 is explicitly selected at
+staging and is limited to documented unrouted, embedded simple SMT geometry;
+it is not arbitrary production-board support. Native acceptance is pending.
 
 ## 1. Prepare the runtime once
 
@@ -39,7 +41,7 @@ can replace the explicit interpreter path. Existing developers may use the
 repository's `.venv\Scripts\python.exe`.
 
 The installer creates an owned, versioned environment at
-`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.4.0` and generates client
+`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.6.0` and generates client
 snippets inside its `client-configs` directory. It does not change PATH,
 Python 2.7, execution policy, Cadence settings, existing client configuration,
 or any board. Re-running is idempotent for the same installed version; it
@@ -198,8 +200,9 @@ The plugin bundles `pcb-placement-orchestrate` above `pcb-placement-plan`,
 namespacing varies. All workflows require examining actual returned PNGs.
 The orchestration and execution skills are opt-in, not implicitly invoked.
 The coordinator manages intake, batches and routing review, but does not add
-native import, initial-placement or routing capabilities; see
-[the orchestration contract](placement-orchestration.md).
+raw logical import or routing capabilities. The new mission engine and explicit
+managed-board model implement conditional initial placement; see
+[the executable workflow](placement-missions.md) and its acceptance limits.
 
 Portable skills guide the client's main agent; they do not remove its other
 tools or act as a sandbox. Configure the host's permissions appropriately.

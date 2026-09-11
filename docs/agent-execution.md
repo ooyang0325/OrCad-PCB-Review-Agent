@@ -11,7 +11,7 @@ operations, not shell access or arbitrary SKILL evaluation.
 | PCB placement orchestrator | Inspect mission state, track phases and delegate the three workers; no direct prepare/apply/save authority |
 | PCB placement planner | Inspect the bound board visually and prepare an exact proposal |
 | PCB layout reviewer | Independently inspect current placement and read recorded execution outcomes |
-| PCB placement executor | Inspect, request interactive human approval, apply the exact proposal in memory, and inspect the outcome |
+| PCB placement executor | Inspect, request exact interactive Apply or separate Save approval, and inspect the outcome |
 
 All four profiles include `pcb_inspect` and must examine the returned PNG.
 None has unrestricted `execute`, `edit`, or `web` tools. Only the orchestrator
@@ -29,9 +29,15 @@ must report the missing capability instead of using a shell/GUI workaround.
 | `pcb_sessions` | List recorded staged sessions and declared backend scope; neither proves live readiness |
 | `pcb_inspect` | Read fresh native state around capture of only the bound Cadence window |
 | `pcb_inspection_status` | Report an unresolved read-only snapshot, or reconcile its exact request ID without replay |
-| `pcb_prepare_placement` | Prepare a pose for an already-placed fixture symbol; no initial placement, import, or movement |
+| `pcb_plan_placement` | Plan a complete managed-board mission from explicit requirements and native pin/footprint data |
+| `pcb_placement_status` | Reconcile fresh native placement coverage and routing screening |
+| `pcb_prepare_next_placement` | Prepare one remaining mission target from fresh state and image |
+| `pcb_prepare_placement` | Prepare a supported exact pose, including unplaced managed-board components; no mutation |
 | `pcb_apply_placement` | Obtain the human's exact confirmation through the host UI, then apply once in memory |
 | `pcb_execution_status` | Read or reconcile the result of an already prepared proposal without replaying it |
+| `pcb_prepare_save` | Prepare a visually bound new-revision save proposal, without saving |
+| `pcb_save_revision` | Obtain separate exact human SAVE approval and save a new managed revision |
+| `pcb_save_status` | Read/reconcile the exact Save result without replay; report reopen separately |
 
 Board tools accept a managed session name such as `board-<id>`, never an arbitrary
 directory, executable, native command, or output path. The session must already

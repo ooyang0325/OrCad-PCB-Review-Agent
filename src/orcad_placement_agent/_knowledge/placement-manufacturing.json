@@ -846,7 +846,7 @@
       ],
       "limits": [
         "Approval, precondition, outcome-reconciliation and persistence rules here are original software workflow policy, not capabilities specified by the books.",
-        "These cards grant no editor authority. The prototype's guarded pose workflow concerns already-placed fixture components, not autonomous initial placement, routing or native production-board support.",
+        "These cards grant no editor authority. Native placement requires an explicitly supported board model and exact human approval; raw logical import, arbitrary production-board editing and routing remain unsupported.",
         "Python tests and textual reviews do not establish native SKILL execution, licensing, dispatch, DRC or persistent board state."
       ],
       "references": [

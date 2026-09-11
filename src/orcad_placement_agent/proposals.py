@@ -43,7 +43,7 @@ def check_snapshot(receipt: Receipt) -> dict[str, Component]:
     identifier(receipt.one("snapshot")[1])
     receipt.one("board")
     receipt.one("version")
-    receipt.one("scene")
+    receipt.scene
     units = receipt.one("units")
     if units[1] != "millimeters" or number(units[3]) <= 0:
         raise ProtocolError("The initial fixture requires known millimeter/DBU units.")
@@ -70,16 +70,30 @@ def propose(
     if refdes not in components:
         raise ProtocolError("Target component is missing.")
     component = components[refdes]
-    if component.fixed or not component.placed or component.mirrored:
-        raise ProtocolError("Only already-placed, unfixed, top-side components are supported.")
+    managed = any(row == ("model", "managed-board-v1") for row in snapshot.records)
+    board = None
+    if managed:
+        from .board import from_receipt
+
+        board = from_receipt(snapshot)
+    if component.fixed or component.mirrored or (not component.placed and not managed):
+        raise ProtocolError("Target must be unfixed/top-side; initial placement needs a complete managed-board snapshot.")
     scale = number(snapshot.one("units")[3])
     target_x = (number(x) * scale).to_integral_value(rounding=ROUND_HALF_UP) / scale
     target_y = (number(y) * scale).to_integral_value(rounding=ROUND_HALF_UP) / scale
     target_angle = number(angle)
     if target_angle not in (0, 90, 180, 270):
         raise ProtocolError("The initial fixture supports only 0/90/180/270 degree targets.")
-    if (target_x, target_y, target_angle) == (component.x, component.y, component.angle):
+    if component.placed and (target_x, target_y, target_angle) == (component.x, component.y, component.angle):
         raise ProtocolError("Proposal is a no-op.")
+    if board is not None and "outline_boundary" in board:
+        from .boundaries import board_boundaries, footprint_box
+
+        target = next(part for part in board["components"] if part["refdes"] == refdes)
+        box = footprint_box(tuple(number(value) for value in target["bounds"]),
+                            target_x, target_y, decimal_text(target_angle))
+        if not all(boundary.contains_box(box) for boundary in board_boundaries(board)):
+            raise ProtocolError("Target footprint crosses the native outline/keepin contour or approximation margin.")
     proposal: dict[str, object] = {
         "schema_version": 1,
         "nonce": session.nonce,
@@ -138,8 +152,9 @@ def proposal_summary(proposal: dict[str, object]) -> str:
     if len(components) != 1:
         raise ProtocolError("Reviewed component is missing or ambiguous.")
     before = components[0]
+    source = f"({before.x}, {before.y}) mm, {before.angle} degrees" if before.placed else "UNPLACED"
     return (
-        f"{before.refdes}: ({before.x}, {before.y}) mm, {before.angle} degrees -> "
+        f"{before.refdes}: {source} -> "
         f"({proposal['x']}, {proposal['y']}) mm, {proposal['angle']} degrees; "
         "pivot: component origin; top side unchanged; memory only."
     )

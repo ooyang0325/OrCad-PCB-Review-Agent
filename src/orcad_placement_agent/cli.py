@@ -23,6 +23,7 @@ from . import expertise, knowledge, references
 from .advisory import TOPIC_QUERIES, build_context
 from .resources import asset_directory
 from .installation import CLIENTS, write_configurations
+from .agent_tools import AgentActionError, AgentActions, display_payload
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,15 +51,27 @@ def main(argv: list[str] | None = None) -> int:
     stage.add_argument("source", type=Path)
     stage.add_argument("--runtime-dir", type=Path)
     stage.add_argument("--skill-dir", type=Path, help="Explicit trusted source override; packaged assets are the default.")
+    stage.add_argument("--model", choices=("fixture", "managed-board-v1"), default="fixture",
+                       help="Explicitly select the native model; source boards are always copied.")
     attach = commands.add_parser("attach", help="Bind the staged copy to an explicit editor through a read-only handshake.")
     attach.add_argument("--session", type=Path, required=True)
     attach.add_argument("--hwnd", type=lambda value: int(value, 0), required=True)
+    mission = commands.add_parser("mission", help="Plan, inspect, and prepare a complete managed-board placement mission.")
+    mission_commands = mission.add_subparsers(dest="mission_command", required=True)
+    for operation in ("plan", "status", "next"):
+        sub = mission_commands.add_parser(operation)
+        sub.add_argument("--session", type=Path, required=True)
+        if operation == "plan":
+            sub.add_argument("--requirements", type=Path, required=True,
+                             help="Explicit design requirements JSON; expected_refdes, clearance_mm and grid_mm required.")
+        else:
+            sub.add_argument("--mission", required=True, help="Exact stored mission identifier.")
     for command, help_text in [
         ("snapshot", "Read fresh board state."),
         ("reconcile", "Read a late receipt without replaying the request."),
         ("propose", "Prepare and review an exact single-component pose."),
         ("apply", "Ask for exact proposal approval, then apply in memory."),
-        ("save", "Ask before saving the current fixture to a new revision."),
+        ("save", "Ask before saving the current managed board to a new revision."),
     ]:
         sub = commands.add_parser(command, help=help_text)
         sub.add_argument("--session", type=Path, required=True)
@@ -143,6 +156,18 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "knowledge":
             return _knowledge_command(args)
+        if args.command == "mission":
+            selected = args.session.expanduser().resolve(strict=True)
+            request = {"action": f"mission-{args.mission_command}", "session": selected.name}
+            if args.mission_command == "plan":
+                if args.requirements.stat().st_size > 131072:
+                    raise AgentActionError("Placement requirements exceed 128 KiB.")
+                request["requirements_json"] = args.requirements.read_text(encoding="utf-8")
+            else:
+                request["mission"] = args.mission
+            result = AgentActions(selected.parent).dispatch(request)
+            print(json.dumps(display_payload(result), indent=2, ensure_ascii=True))
+            return 2 if result["status"] == "blocked" else 0
         if args.command == "editors":
             from dataclasses import asdict
 
@@ -157,7 +182,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.command == "stage":
             root = stage_session(
-                args.source, runtime, args.skill_dir if args.skill_dir is not None else asset_directory("skill")
+                args.source, runtime, args.skill_dir if args.skill_dir is not None else asset_directory("skill"),
+                model=args.model,
             )
             bootstrap = json.dumps(str(root / "bootstrap.il"))
             print(f"Session: {root}")
@@ -181,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
     except IndeterminateDelivery as error:
         print(f"INDETERMINATE: {error}", file=sys.stderr)
         return 3
-    except (ConfigurationError, SessionError, ProtocolError, TransportError,
+    except (ConfigurationError, SessionError, ProtocolError, TransportError, AgentActionError,
             knowledge.KnowledgeError, sqlite3.Error, OSError, json.JSONDecodeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

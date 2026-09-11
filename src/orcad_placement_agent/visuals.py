@@ -16,7 +16,7 @@ import uuid
 import zlib
 
 from .protocol import Receipt, Request
-from .session import Session, write_json, write_new
+from .session import Session, SessionError, write_json, write_new
 from .transport import EditorWindow, TransportError, WindowsAPI
 
 
@@ -258,7 +258,7 @@ def capture_observation(
     if (
         before.one("board") != after.one("board")
         or Path(after.one("board")[1]).resolve() != session.working
-        or before.one("scene") != after.one("scene")
+        or before.scene != after.scene
     ):
         raise VisualError("Native board state changed during capture; no observation was published.")
     observation_id = uuid.uuid4().hex
@@ -267,7 +267,7 @@ def capture_observation(
     observation: dict[str, object] = {
         "schema_version": 1, "kind": "pcb-visual-observation",
         "observation_id": observation_id, "before_request_id": before.request_id,
-        "after_request_id": after.request_id, "scene_native": after.one("scene")[1],
+        "after_request_id": after.request_id, "scene_native": after.scene,
         "editor": asdict(editor), "captured_at": datetime.now(timezone.utc).isoformat(),
         "width": width, "height": height,
         "view_fit_request_id": fit_request,
@@ -280,7 +280,7 @@ def capture_observation(
     write_new(image_path, image.png)
     try:
         write_json(metadata_path, observation)
-    except OSError:
+    except (OSError, SessionError):
         image_path.unlink()
         raise
     return observation

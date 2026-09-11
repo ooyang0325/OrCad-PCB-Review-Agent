@@ -15,7 +15,8 @@ Install from the trusted checkout:
 The second command waits for an MCP client; stdout is the protocol. Do not add
 banner output to launchers. The optional `integrations` extra uses the official
 MCP Python SDK 2.2 series. The underlying controller still supports Windows
-classic PCB Editor 25.1 and only the documented synthetic fixture for writes.
+classic PCB Editor 25.1. The fixture model remains default; experimental
+managed-board-v1 must be explicitly staged and still requires native acceptance.
 
 ## Tools
 
@@ -37,7 +38,14 @@ with distinct `source_kind` values. Missing/stale/corrupt supplements produce
 warnings without disabling real bundled expertise. `pcb_reference_page` is
 strictly for original PDF excerpts and errors when no local index is configured.
 Install `.[knowledge]` only when extracting PDFs; catalog notices expose gaps.
-The server has ten tools; all reference operations are read-only.
+The server has sixteen tools; all reference operations are read-only.
+
+`pcb_plan_placement`, `pcb_prepare_next_placement`, and `pcb_placement_status`
+implement the [closed-loop mission workflow](placement-missions.md). They
+return actual images and native-derived planning facts, but do not mutate a
+board. `pcb_prepare_save`, `pcb_save_revision`, and `pcb_save_status` provide a
+separate visually grounded, one-use SAVE approval and outcome-reconciliation
+path. Save success is not automatic reopen verification.
 
 ## Human approval across protocol versions
 
@@ -46,13 +54,14 @@ Portable installs are **read-only by default**. Only the operator may add
 input with no automatic elicitation answers. The flag is not a model tool
 argument, and no installer or marketplace manifest enables it.
 
-Apply has only `session` and `proposal` as model-visible arguments. A hidden
+Apply and Save have only `session` and `proposal` as model-visible arguments. A hidden
 SDK dependency requests an exact form response. It asks on both
 legacy MCP connections and the newer multi-round-trip protocol; the SDK binds
 continuation state to the originating request and question.
 
 There is no default answer, model confirmation parameter, per-call override,
-or automatic fallback. The response must exactly match `APPLY <proposal-id>`.
+or automatic fallback. The response must exactly match `APPLY <proposal-id>` or
+the separately prepared `SAVE <save-proposal-id>`.
 Decline/cancel, wrong answers, missing form elicitation, or an unavailable
 human do not dispatch Apply. The client must render genuine human input;
 protocol capability negotiation

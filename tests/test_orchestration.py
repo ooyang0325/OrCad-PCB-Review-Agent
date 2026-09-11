@@ -12,13 +12,17 @@ from orcad_placement_agent.transport import CommandTransport
 
 
 class OrchestrationContractTests(unittest.TestCase):
-    def test_capabilities_do_not_invent_zero_to_full_native_support(self):
+    def test_capabilities_declare_conditional_initial_placement_not_live_readiness(self):
         capabilities = backend_capabilities()
         self.assertEqual(capabilities["implementation_version"], __version__)
         self.assertTrue(capabilities["declaration_only"])
-        self.assertEqual(capabilities["native_scope"], "original_synthetic_fixture")
+        self.assertEqual(capabilities["default_native_model"], "fixture")
+        self.assertEqual(capabilities["initial_placement_model"], "managed-board-v1")
+        self.assertTrue(capabilities["initial_component_placement"])
+        self.assertTrue(capabilities["placement_missions"])
+        self.assertIn("live acceptance", capabilities["native_acceptance"])
         for name in (
-            "logical_design_import", "initial_component_placement",
+            "logical_design_import", "agent_undo",
             "arbitrary_board_writes", "route_generation",
             "routing_feasibility_verification", "model_can_authorize_changes",
         ):
@@ -37,15 +41,15 @@ class OrchestrationContractTests(unittest.TestCase):
             result = service.dispatch({"action": "sessions"})
             self.assertEqual(result["sessions"], [])
             self.assertTrue(result["capabilities"]["declaration_only"])
-            self.assertFalse(result["capabilities"]["initial_component_placement"])
+            self.assertEqual(result["capabilities"]["initial_placement_model"], "managed-board-v1")
             factory.assert_not_called()
 
     def test_capability_payloads_cannot_change_the_shared_declaration(self):
         first = backend_capabilities()
-        first["initial_component_placement"] = True
+        first["initial_component_placement"] = False
         first["supported_target_angles"].append(45)
         second = backend_capabilities()
-        self.assertFalse(second["initial_component_placement"])
+        self.assertTrue(second["initial_component_placement"])
         self.assertEqual(second["supported_target_angles"], [0, 90, 180, 270])
 
     def test_coordinator_has_delegation_but_no_direct_execution_authority(self):

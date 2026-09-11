@@ -6,14 +6,16 @@ from pathlib import Path
 import re
 import sys
 from typing import Callable
+import uuid
 
 from .diagnostics import ConfigurationError, default_runtime_directory
 from .capabilities import backend_capabilities
 from . import expertise
-from .protocol import MAX_BYTES, ProtocolError, Receipt, identifier
+from .protocol import MAX_BYTES, MAX_METADATA_BYTES, ProtocolError, Receipt, identifier, number
 from .proposals import approve_and_apply, load_proposal, propose, proposal_summary
 from .session import Session, SessionError, write_json
 from .transport import IndeterminateDelivery, TransportError
+from .save_proposals import prepare_save, load_save, approve_save, save_status
 
 
 class AgentActionError(ValueError):
@@ -33,12 +35,14 @@ def json_wire(value: object) -> object:
 
 def display_payload(value: object) -> object:
     """Compact tool presentation; complete native receipts stay on disk."""
-    if isinstance(value, str) and value.startswith("OPA-FIXTURE-1;"):
+    if isinstance(value, str) and value.startswith(("OPA-FIXTURE-1;", "OPA-BOARD-1;")):
         return {"opaque_scene_omitted_from_display": True,
                 "instruction": "Use the persisted native receipt for complete scene data."}
     if isinstance(value, dict):
         return {key: display_payload(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
+        if len(value) == 3 and value[0] == "scene-part":
+            return ["scene-part", value[1], "Opaque scene omitted; use the persisted receipt."]
         return [display_payload(item) for item in value]
     return json_wire(value)
 
@@ -150,6 +154,7 @@ class AgentActions:
                     try:
                         session = self.session(path.name)
                         entry = {"session": path.name, "working_board": str(session.working)}
+                        entry["native_model"] = getattr(session, "model", "fixture")
                         if (session.root / "editor.json").is_file():
                             entry["editor"] = asdict(session.editor())
                             entry["binding"] = "Recorded identity; not proof this board is currently open."
@@ -166,12 +171,103 @@ class AgentActions:
             "apply": {"action", "session", "proposal", "confirmation"},
             "execution-status": {"action", "session", "proposal"},
             "inspection-status": {"action", "session"} | ({"request"} if "request" in request else set()),
+            "mission-plan": {"action", "session", "requirements_json"},
+            "mission-status": {"action", "session", "mission"},
+            "mission-next": {"action", "session", "mission"},
+            "prepare-save": {"action", "session"},
+            "describe-save": {"action", "session", "proposal"},
+            "apply-save": {"action", "session", "proposal", "confirmation"},
+            "save-status": {"action", "session", "proposal"},
         }
         if action not in allowed or set(request) != allowed[action]:
             raise AgentActionError("Unsupported action or unexpected/missing fields.")
         if not all(isinstance(value, str) for value in request.values()):
             raise AgentActionError("Agent action values must be strings.")
         session = self.session(request["session"])
+        if action == "save-status":
+            return save_status(session, request["proposal"])
+        if action == "prepare-save":
+            observation = self.observation(session)
+            receipt = self.snapshot(session, observation)
+            digest, _ = prepare_save(session, receipt)
+            write_json(session.root / f"visual-save-proposal-{digest}.json",
+                       {"proposal": digest, "observation_id": observation["observation_id"]})
+            return {"status": "prepared", **self.describe_save(session, digest)}
+        if action in {"describe-save", "apply-save"}:
+            description = self.describe_save(session, request["proposal"])
+            if action == "describe-save":
+                return {"status": "prepared", **description}
+            receipt = approve_save(session, request["proposal"], request["confirmation"])
+            result = {**save_status(session, request["proposal"]), "proposal": request["proposal"]}
+            from .visuals import VisualError
+
+            try:
+                observation = self.observation(session)
+                result["visual"] = observation
+                if receipt.status == "saved" and self.snapshot(session, observation).scene != receipt.scene:
+                    result["visual_error"] = "The live scene changed after Save; the saved outcome still stands."
+            except (VisualError, AgentActionError, ProtocolError, SessionError, TransportError, OSError) as error:
+                result["visual_error"] = str(error)
+                result["message"] = "Native Save outcome stands; recover inspection without resending Save."
+            write_json(session.root / f"agent-save-{receipt.request_id}.json", result)
+            return result
+        if action in {"mission-plan", "mission-status", "mission-next"}:
+            from .board import from_receipt
+            from .missions import plan_mission, mission_status, next_candidate
+
+            observation = self.observation(session)
+            receipt = self.snapshot(session, observation)
+            board = from_receipt(receipt)
+            if action == "mission-plan":
+                if len(request["requirements_json"]) > 131072:
+                    raise AgentActionError("Placement requirements exceed 128 KiB.")
+                requirements = json.loads(request["requirements_json"])
+                try:
+                    plan = plan_mission(board, requirements)
+                except ValueError as error:
+                    raise AgentActionError(str(error)) from error
+                mission_id = uuid.uuid4().hex
+                stored = {"schema_version": 1, "nonce": session.nonce, "mission": mission_id,
+                          "plan": plan}
+                if len((json.dumps(stored, indent=2, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")) > MAX_METADATA_BYTES:
+                    raise AgentActionError("Placement mission exceeds the stored metadata limit.")
+                write_json(session.root / f"mission-{mission_id}.json", stored)
+                return {"status": "blocked" if plan["status"] == "blocked" else "mission_planned",
+                        "mission": mission_id, "plan": plan,
+                        "visual": observation,
+                        "warning": "A plan is not placement or approval. Review the complete targets and constraints."}
+            mission_id = identifier(request["mission"])
+            stored = session._read_json(f"mission-{mission_id}.json")
+            if (set(stored) != {"schema_version", "nonce", "mission", "plan"}
+                    or stored["schema_version"] != 1 or stored["nonce"] != session.nonce
+                    or stored["mission"] != mission_id):
+                raise AgentActionError("Mission metadata does not match this session.")
+            try:
+                progress = mission_status(board, stored["plan"])
+                candidate = next_candidate(board, stored["plan"]) if action == "mission-next" else None
+            except ValueError as error:
+                raise AgentActionError(str(error)) from error
+            result = {"status": "blocked" if progress["status"] == "blocked" else "mission_status", "mission": mission_id,
+                      "progress": progress, "visual": observation}
+            if candidate is None:
+                return result
+            if candidate.get("status") == "blocked":
+                return {**result, "status": "blocked", "candidate": candidate}
+            scale = number(receipt.one("units")[3])
+            for axis in ("x", "y"):
+                native_coordinate = number(candidate[axis]) * scale
+                if native_coordinate != native_coordinate.to_integral_value():
+                    raise AgentActionError("Mission target is not exactly representable in native DBUs; re-plan without rounding.")
+            digest, proposal = propose(session, receipt, candidate["refdes"],
+                                       candidate["x"], candidate["y"], candidate["angle"])
+            if any(number(proposal[axis]) != number(candidate[axis]) for axis in ("x", "y", "angle")):
+                raise AgentActionError("Prepared pose differs from the exact mission target; no visual proposal was published.")
+            write_json(session.root / f"visual-proposal-{digest}.json",
+                       {"proposal_sha256": digest, "observation_id": observation["observation_id"]})
+            write_json(session.root / f"mission-proposal-{digest}.json",
+                       {"mission": mission_id, "proposal": digest})
+            return {**result, "status": "prepared", **self.describe(session, digest),
+                    "candidate": candidate}
         if action == "inspection-status":
             pending_path = session.root / "pending.json"
             requested = identifier(request["request"]) if "request" in request else None
@@ -269,7 +365,7 @@ class AgentActions:
             result["visual"] = observation
             if receipt.status in {"applied", "rolled_back"}:
                 observed = self.snapshot(session, observation)
-                if observed.one("scene")[1] != receipt.one("scene")[1]:
+                if observed.scene != receipt.scene:
                     result["visual_error"] = "The scene changed after the native outcome; the image shows the later state."
                     result["message"] = "Do not retry. Compare the recorded native receipt with this later visual observation."
         except (VisualError, AgentActionError, ProtocolError, SessionError, TransportError, OSError) as error:
@@ -280,6 +376,28 @@ class AgentActions:
             )
         write_json(session.root / f"agent-execution-{receipt.request_id}.json", result)
         return result
+
+    def describe_save(self, session: Session, digest: str) -> dict[str, object]:
+        value = load_save(session, digest)
+        binding = session._read_json(f"visual-save-proposal-{digest}.json")
+        if binding.get("proposal") != digest:
+            raise AgentActionError("Save proposal lacks its exact visual binding.")
+        observation_id = identifier(binding.get("observation_id"))
+        observation = session._read_json(f"visual-{observation_id}.json")
+        receipt = self.snapshot(session, observation)
+        if receipt.scene_digest != value["scene_digest"] or receipt.one("snapshot")[1] != value["snapshot_id"]:
+            raise AgentActionError("Save observation does not match the reviewed scene.")
+        image = session.root / f"visual-{observation_id}.png"
+        if Path(observation["image_path"]).resolve() != image or not image.is_file():
+            raise AgentActionError("Save proposal image is unavailable.")
+        session.verify_source()
+        destination = session.root / value["destination"]
+        return {
+            "session": session.root.name, "proposal_sha256": digest, "visual": observation,
+            "working_board": str(session.working), "destination": str(destination),
+            "summary": f"Save this exact reviewed board state to a new revision: {destination}",
+            "warning": "Separate SAVE approval required. No source overwrite; no automatic reopen or manufacturing certification.",
+        }
 
 
 def main() -> int:

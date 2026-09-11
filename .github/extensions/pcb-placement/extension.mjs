@@ -7,7 +7,7 @@ import { createPlacementTools } from "./operations.mjs";
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const python = path.join(workspace, ".venv", "Scripts", "python.exe");
-const outputLimit = 2 * 1024 * 1024;
+const outputLimit = 8 * 1024 * 1024;
 
 function run(request) {
     return new Promise((resolve, reject) => {

@@ -1,0 +1,131 @@
+; Pure contour checks in a dedicated native session. No database edits.
+procedure(opaNonrectangularReadOnlyAcceptance(identifier)
+    let((notch outline geometry output path bad rows points radius edges result poly rectangle
+         reverseEdges reverseGeometry)
+        opaRequire(opaID(identifier) && !opaDispatchActive
+            "Read-only contour acceptance needs an exact ID and idle session.")
+        opaBoardGuard()
+        path = opaPath(identifier ".nonrectangular.csv")
+        opaRequire(!isFile(path) "Contour acceptance output already exists.")
+        outline = '((0 0) (120000 0) (120000 40000) (40000 40000)
+            (40000 120000) (0 120000))
+        opaManagedContourValidate(outline)
+        geometry = list("polygon" "BOARD GEOMETRY/DESIGN_OUTLINE" nil
+            '((0 0) (120000 120000)) nil nil outline 0)
+        opaRequire(opaManagedContourContains('((10000 10000) (30000 90000)) geometry)
+            "Legal L-shaped-board footprint rejected.")
+        opaRequire(!opaManagedContourContains('((50000 50000) (80000 80000)) geometry)
+            "Bounding box falsely accepted the concave cutout.")
+        rows = list(list("check" "concave-boundary-not-extents" "passed"))
+        notch = '((0 0) (100000 0) (100000 100000) (60000 100000)
+            (60000 30000) (40000 30000) (40000 100000) (0 100000))
+        opaManagedContourValidate(notch)
+        geometry = list("polygon" "PACKAGE KEEPIN/ALL" nil
+            '((0 0) (100000 100000)) nil nil notch 0)
+        foreach(point '((20000 20000) (80000 20000) (80000 80000) (20000 80000))
+            opaRequire(opaManagedContourPoint(notch point) "Expected inside corner."))
+        opaRequire(!opaManagedContourContains('((20000 20000) (80000 80000)) geometry)
+            "Four inside corners missed the intervening notch.")
+        rows = cons(list("check" "notch-between-inside-corners" "passed") rows)
+        opaRequire(opaManagedContourContains('((10000 10000) (40000 90000)) geometry)
+            "Exact zero-margin edge touch was rejected.")
+        geometry = list("polygon" "PACKAGE KEEPIN/ALL" nil
+            '((0 0) (100000 100000)) nil nil notch 12)
+        opaRequire(!opaManagedContourContains('((10000 10000) (40000 90000)) geometry)
+            "Approximation error did not tighten containment.")
+        rows = cons(list("check" "conservative-approximation-margin" "passed") rows)
+        bad = errset(opaManagedContourValidate('((0 0) (100000 100000)
+            (0 100000) (100000 0))) nil)
+        opaRequire(!bad "Self-crossing contour was accepted.")
+        rows = cons(list("check" "invalid-contour-rejection" "passed") rows)
+        points = opaManagedArcPoints(list("arc" '(10000 0) '(0 10000) '(0 0) nil 10000.0 nil))
+        opaRequire(abs(atan2(1.0 0.0) - 1.5707963267948966) < 0.000000000001 &&
+            abs(atan2(0.0 -1.0) - 3.141592653589793) < 0.000000000001
+            "Native atan2 direction convention differs from the contour model.")
+        opaRequire(length(points) > 2 "Quarter arc was not subdivided.")
+        foreach(point points
+            radius = sqrt(1.0 * car(point) * car(point) + 1.0 * cadr(point) * cadr(point))
+            opaRequire(car(point) >= 0 && cadr(point) >= 0 && abs(radius - 10000.0) <= 1.0
+                "Quarter-arc samples have wrong direction or radius."))
+        points = opaManagedArcPoints(list("arc" '(10000 0) '(0 10000) '(0 0) t 10000.0 nil))
+        opaRequire(setof(point points car(point) < 0) && setof(point points cadr(point) < 0)
+            "Clockwise major-arc sweep was lost.")
+        bad = errset(opaManagedArcPoints(list("arc" '(10000 0) '(0 12000) '(0 0) nil 10000.0 nil)) nil)
+        opaRequire(!bad "Inconsistent native arc geometry was accepted.")
+        points = opaManagedArcPoints(list("arc" '(100000000 0) '(100000000 1)
+            '(0 0) nil 100000000.0 nil))
+        opaRequire(equal(points '((100000000 0))) "Short large-radius arc lost its stable sweep.")
+        points = opaManagedArcPoints(list("arc" '(-10000 0) '(10000 0) '(0 0) t 10000.0 nil))
+        opaRequire(setof(point points cadr(point) > 0) &&
+            !setof(point points cadr(point) < 0) "Signed-zero semicircle selected a negative sweep.")
+        rows = cons(list("check" "arc-direction-radius-and-bounds" "passed") rows)
+        edges = nil
+        for(index 0 length(outline) - 1
+            edges = cons(list("line" nth(index outline)
+                nth(mod(index + 1 length(outline)) outline) nil nil nil nil) edges))
+        result = opaManagedContourFromEdges(edges)
+        geometry = list("polygon" "BOARD GEOMETRY/DESIGN_OUTLINE" nil
+            '((0 0) (120000 120000)) nil nil cadr(result) caddr(result))
+        opaRequire(!opaManagedContourContains('((50000 50000) (80000 80000)) geometry) &&
+            opaManagedContourContains('((10000 10000) (30000 90000)) geometry)
+            "Reordered native edges changed the contour.")
+        bad = errset(opaManagedContourFromEdges(cdr(edges)) nil)
+        opaRequire(!bad "An open edge chain was accepted.")
+        rows = cons(list("check" "ordered-complete-edge-chain" "passed") rows)
+        path = axlPathStart('((0 0) (12 0) (12 4) (4 4) (4 12) (0 12) (0 0)) 0.0)
+        opaRequire(path "Cannot create an in-memory native contour test path.")
+        poly = axlPolyFromDB(path)
+        opaRequire(poly && car(poly) "Cannot create an in-memory native contour test polygon.")
+        opaRequire(opaManagedPolygonContains('((10000 10000) (30000 90000)) car(poly))
+            "Native intersection rejected the contained rectangle.")
+        opaRequire(!opaManagedPolygonContains('((50000 50000) (80000 80000)) car(poly))
+            "Native intersection accepted an empty result as contained.")
+        opaRequire(!opaManagedPolygonContains('((30000 30000) (60000 60000)) car(poly))
+            "Native intersection accepted partial overlap as containment.")
+        rows = cons(list("check" "native-polygon-intersection" "passed") rows)
+        ; Use full native edge data, not equal bounding boxes.
+        geometry = list("polygon" "BOARD GEOMETRY/DESIGN_OUTLINE" nil
+            '((0 0) (120000 120000)) car(result) nil cadr(result) caddr(result))
+        reverseEdges = foreach(mapcar edge car(result)
+            list(car(edge) nth(2 edge) nth(1 edge) nth(3 edge)
+                if(car(edge) == "arc" then !nth(4 edge) else nil) nth(5 edge) nth(6 edge)))
+        reverseGeometry = list("polygon" "BOARD GEOMETRY/OUTLINE" nil
+            nth(3 geometry) reverseEdges nil nil 0)
+        opaRequire(equal(opaManagedBoundaryIdentity(geometry) opaManagedBoundaryIdentity(reverseGeometry))
+            "Traversal reversal changed full boundary identity.")
+        rectangle = list("polygon" "BOARD GEOMETRY/OUTLINE" nil '((0 0) (120000 120000))
+            list(list("line" '(0 0) '(120000 0) nil nil nil nil)
+                 list("line" '(120000 0) '(120000 120000) nil nil nil nil)
+                 list("line" '(120000 120000) '(0 120000) nil nil nil nil)
+                 list("line" '(0 120000) '(0 0) nil nil nil nil)) nil nil 0)
+        opaRequire(!equal(opaManagedBoundaryIdentity(geometry) opaManagedBoundaryIdentity(rectangle))
+            "Different legacy contour with identical extents was accepted.")
+        edges = list(list("arc" '(10000 0) '(-10000 0) '(0 0) nil 10000.0 nil)
+            list("arc" '(-10000 0) '(10000 0) '(0 0) nil 10000.0 nil))
+        geometry = list("polygon" "BOARD GEOMETRY/DESIGN_OUTLINE" nil
+            '((-10000 -10000) (10000 10000)) edges nil nil 12)
+        reverseEdges = foreach(mapcar edge edges
+            list("arc" nth(2 edge) nth(1 edge) nth(3 edge) !nth(4 edge) nth(5 edge) nil))
+        reverseGeometry = list("polygon" "BOARD GEOMETRY/OUTLINE" nil
+            nth(3 geometry) reverseEdges nil nil 12)
+        opaRequire(equal(opaManagedBoundaryIdentity(geometry) opaManagedBoundaryIdentity(reverseGeometry))
+            "Reversed native arcs changed equivalent geometry.")
+        reverseGeometry = list("polygon" "BOARD GEOMETRY/OUTLINE" nil nth(3 geometry)
+            list(car(edges) list("arc" '(-10000 0) '(10000 0) '(0 1) nil 10000.0 nil)) nil nil 12)
+        opaRequire(!equal(opaManagedBoundaryIdentity(geometry) opaManagedBoundaryIdentity(reverseGeometry))
+            "Changed arc center with identical extents was accepted.")
+        rows = cons(list("check" "legacy-outline-full-geometry" "passed") rows)
+        path = opaPath(identifier ".nonrectangular.csv")
+        output = outfile(path)
+        opaRequire(output "Cannot write contour acceptance result.")
+        unwindProtect(
+            progn(
+                fprintf(output "%s\n" buildString(mapcar('opaCsv
+                    list("OPA_CONTOUR_READONLY" "1" opaNonce identifier opaBoardPath)) ","))
+                foreach(row reverse(rows)
+                    fprintf(output "%s\n" buildString(mapcar('opaCsv row) ",")))
+                fprintf(output "%s\n" buildString(mapcar('opaCsv list("end" identifier)) ",")))
+            close(output))
+        t
+    )
+)

@@ -13,8 +13,10 @@ These are development gates, not dates or GitHub milestones.
 | M6 | Advisory expert agents | Read-only planner/reviewer profiles and bounded, citation-bearing context packets | Complete for Copilot-profile advisory workflow |
 | M7 | Visual agent execution | All profiles inspect actual Cadence PNGs; bounded tool execution obtains exact human approval and reports native/post-image outcomes | Visual/tools complete; first live move awaiting exact approval |
 | M8 | Portable client distribution | Standard MCP, packaged native assets, safe setup/config generation, and Codex/Claude/Copilot plugin-marketplace manifests | Complete packaging; client prerequisites and repository access required |
-| M9 | Placement mission coordinator | Fourth agent/portable workflow delegates intake, floorplanning, batches and routing-aware review with explicit inventory/capability gates | Coordinator implemented; native initial-placement/import/routing gaps remain |
+| M9 | Placement mission coordinator | Fourth agent/portable workflow delegates intake, floorplanning, batches and routing-aware review with explicit inventory/capability gates | Coordinator implemented; now backed by the M11 mission engine |
 | M10 | Bundled PCB expertise | Original source-grounded knowledge ships in packages and works through all agent/reference flows without books or an index | 36 cards and no-book retrieval implemented; native capability limits unchanged |
+| M11 | Executable zero-placed missions | Concrete all-component targets, initial placement, fresh-readback progression, routing screening and separate revision approval | Managed readback/PNG and six native reader cases pass; initial placement/mutation/save acceptance pending human approval |
+| M12 | Nonrectangular outlines | Native line/arc contours and whole-footprint concave containment through mission/proposal/readback | Native contour checks and read-only howto outline extraction pass; unrelated full-board restrictions remain |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.
