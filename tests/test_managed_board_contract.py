@@ -187,7 +187,18 @@ class ManagedBoardContractTests(unittest.TestCase):
         policy = self.procedures["opaManagedPlacementPolicy"]
         self.assertIn("opaManagedContourContains(bounds outline)", policy)
         self.assertIn("opaManagedContourContains(bounds keepin)", policy)
+        self.assertIn("opaManagedPolygonContains(bounds outlinePoly)", policy)
+        self.assertIn("opaManagedPolygonContains(bounds keepinPoly)", policy)
         self.assertNotIn("opaManagedInside(bounds outline)", policy)
+
+    def test_native_polygon_intersection_never_equates_failure_or_area_to_containment(self):
+        check = self.procedures["opaManagedPolygonContains"]
+        self.assertIn("axlPathStart(", check)
+        self.assertIn("axlPolyOperation(car(rectangles) polygon 'AND)", check)
+        self.assertIn('opaRequire(intersection "Native boundary intersection failed;', check)
+        self.assertIn("equal(car(rectangles) car(intersection))", check)
+        self.assertNotIn("->area", check)
+        self.assertNotIn("->bBox", check)
 
     def test_arc_sampling_is_bounded_and_does_not_treat_chords_as_exact(self):
         arc = self.procedures["opaManagedArcPoints"]

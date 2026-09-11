@@ -28,6 +28,12 @@ a concave notch can cross between the corners. The planner checks the entire
 clearance-expanded footprint rectangle and rejects any contour edge entering
 its interior. The native placement gate independently performs whole-footprint
 containment before committing a change. Native DRC remains a separate check.
+As an additional check, it intersects an in-memory footprint rectangle with
+the original native curved boundary and requires geometric equality with the
+whole rectangle. Empty results are not containment, and operation failure is
+not interpreted as an empty/successful result. Native polygon operations have
+documented edge-case limits, so this supplements rather than replaces the
+conservative contour check or DRC.
 
 Bounding rectangles are used only to limit the search grid and reject obvious
 misses. The planner never uses them as final proof of containment. Existing

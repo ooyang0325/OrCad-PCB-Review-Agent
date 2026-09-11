@@ -1000,6 +1000,27 @@ procedure(opaManagedContourContains(box geometry)
     )
 )
 
+procedure(opaManagedPolygonContains(box polygon)
+    let((path rectangles intersection xmin ymin xmax ymax)
+        xmin = caar(box) / 10000.0
+        ymin = cadar(box) / 10000.0
+        xmax = caadr(box) / 10000.0
+        ymax = cadadr(box) / 10000.0
+        path = axlPathStart(list(list(xmin ymin) list(xmax ymin)
+            list(xmax ymax) list(xmin ymax) list(xmin ymin)) 0.0)
+        opaRequire(path "Cannot construct an in-memory footprint boundary.")
+        rectangles = axlPolyFromDB(path)
+        opaRequire(rectangles && length(rectangles) == 1 && car(rectangles)
+            "Cannot convert the complete footprint rectangle to native polygon data.")
+        intersection = axlPolyOperation(car(rectangles) polygon 'AND)
+        ; Bare nil is an operation failure, whereas (nil) is an empty result.
+        opaRequire(intersection "Native boundary intersection failed; containment is unknown.")
+        length(intersection) == 1 && car(intersection) &&
+            !car(intersection)->holes && !car(intersection)->isHole &&
+            equal(car(rectangles) car(intersection))
+    )
+)
+
 procedure(opaManagedContourRecords(role geometry)
     let((rows vertices index)
         vertices = nth(6 geometry)
@@ -1162,16 +1183,22 @@ procedure(opaManagedWritesAllowed(frame)
 )
 
 procedure(opaManagedPlacementPolicy(frame)
-    let((outline keepin keepouts bounds others)
+    let((outline keepin keepouts bounds others outlinePoly keepinPoly design)
         outline = caddr(assoc("outline" frame->common))
         keepin = caddr(assoc("keepin" frame->common))
         keepouts = setof(row frame->common car(row) == "keepout")
+        design = axlDBGetDesign()
+        outlinePoly = opaManagedBoundaryPoly(design->designOutline)
+        keepinPoly = opaManagedBoundaryPoly(design->keepinPlace)
         foreach(data frame->components
             when(nth(5 data)
                 bounds = nth(6 data)
                 opaRequire(opaManagedContourContains(bounds outline) &&
                     opaManagedContourContains(bounds keepin)
                     "Conservative package/pad bounds cross the actual outline/keepin contour.")
+                opaRequire(opaManagedPolygonContains(bounds outlinePoly) &&
+                    opaManagedPolygonContains(bounds keepinPoly)
+                    "Native curve intersection did not confirm whole-footprint containment.")
                 foreach(row keepouts
                     opaRequire(!opaOverlap(bounds cadr(row))
                         "Conservative package/pad bounds overlap a package keepout."))

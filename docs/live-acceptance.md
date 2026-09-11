@@ -6,7 +6,9 @@ Version 0.6.0 adds explicit simple outline/keepin contours to native snapshots
 and placement missions. A separate read-only Cadence 25.1 S050 session passed
 native contour checks for concavities, a notch between four inside corners,
 approximation margins, invalid contours, arc direction/radius and edge-chain
-ordering. Source and working-board bytes and pre/post native scene were
+ordering. Additional native polygon-intersection cases passed for complete
+containment, disjoint-empty geometry and partial overlap. Source and
+working-board bytes and pre/post native scene were
 unchanged during those checks.
 
 The provided `design\howto_agent_placement\allegro\howto.brd` was then copied
