@@ -111,6 +111,20 @@ class ManagedBoardContractTests(unittest.TestCase):
             self.assertIn("opaManaged" + name + "(", dispatch)
             self.assertIn("opaFixture" + name + "(", dispatch)
             self.assertIn("opaManagedMode()", dispatch)
+        properties = procedures["opaProps"]
+        self.assertIn("when(object->prop", properties)
+        self.assertIn("values = axlDBGetProperties(object)", properties)
+        self.assertIn('opaRequire(values "Attached native properties could not be read.")', properties)
+
+    def test_optional_native_reader_suite_contains_no_board_mutations(self):
+        native = (ROOT / "tests" / "native" / "managed_readonly.il").read_text(encoding="ascii")
+        procedures = _procedures(native)
+        self.assertEqual(set(procedures), {"opaManagedReadOnlyAcceptance"})
+        code = _code_only(native)
+        self.assertNotRegex(code, r"\baxl(?:DBCreate\w*|DBTransaction\w*|TransformObject|DRCUpdate|SaveDesign|OpenDesign|DBDelete\w*)\(")
+        self.assertIn("opaBoardGuard()", code)
+        self.assertIn("mod(index 256)", code)
+        self.assertIn('opaManagedReadBytes(strcat(opaRoot "\\\\native-byte-fixture.bin") 511)', native)
 
     def test_no_registration_import_library_loading_or_settings_writes(self):
         code = _code_only(self.source)
@@ -161,7 +175,7 @@ class ManagedBoardContractTests(unittest.TestCase):
         self.assertIn("length(design->components) >= 1", code)
         self.assertIn("length(design->components) <= 256", code)
         self.assertIn("component->package definitions", code)
-        self.assertIn("!component->functions", code)
+        self.assertIn("opaManagedFunctions(component)", code)
         self.assertNotIn("length(design->symbols) > 0", code)
         definitions = self.procedures["opaManagedDefinitions"]
         self.assertNotIn("definition->instances", _code_only(definitions))
@@ -234,10 +248,52 @@ class ManagedBoardContractTests(unittest.TestCase):
         for guard in (
             "!design->region", "!design->groups", "!design->module", "!design->zone",
             "!design->ecsets", "!design->keepinRoute", "!axlDBGetLonelyBranches()",
-            "!axlGetAllAttachmentNames()",
         ):
             self.assertIn(guard, read)
         self.assertIn("!axlCnsClassTableFind('netclass)", self.source)
+
+    def test_attachments_preserve_expanded_binary_data_without_changing_database(self):
+        read = self.procedures["opaManagedReadBytes"]
+        self.assertIn('axlDMOpenFile("TEMP" path "rb")', read)
+        self.assertIn("getc(port)", read)
+        self.assertIn("charToInt(value)", read)
+        self.assertIn('sprintf(nil "%02x" value)', read)
+        self.assertIn("count < maximum", read)
+        self.assertIn("axlDMClose(port)", read)
+        attachment = self.procedures["opaManagedAttachments"]
+        self.assertIn("axlGetAttachment(name 'file)", attachment)
+        self.assertNotIn("axlGetAttachment(name 'string)", attachment)
+        self.assertIn("metadata->size <= 65536", attachment)
+        self.assertIn("131072 - expanded", attachment)
+        self.assertIn("deleteFile(path)", attachment)
+        self.assertIn('list("attachments" opaManagedAttachments())', self.procedures["opaManagedReadFrame"])
+
+    def test_native_default_flags_are_modeled_not_confused_with_fixed_topology(self):
+        stacks = self.procedures["opaManagedPadstacks"]
+        self.assertIn("member(stack->padSuppresion '(nil t))", stacks)
+        self.assertIn("stack->padSuppresion opaProps(stack)", stacks)
+        component = self.procedures["opaManagedComponent"]
+        self.assertIn("fixed = if(fixed || axlDBIsFixed(symbol)", component)
+        self.assertNotIn("fixed = if(fixed || axlDBIsFixed(pin)", component)
+        nets = self.procedures["opaManagedNetData"]
+        self.assertIn("!rat->userDefined", nets)
+        self.assertIn("rat->pwrAndGnd rat->ratsPlaced", nets)
+        stackup = self.procedures["opaManagedStackup"]
+        self.assertIn('!entry->layerType && entry->layerFunction == "SURFACE" && !entry->conductor', stackup)
+
+    def test_logical_function_mapping_checks_both_forward_and_reverse_ownership(self):
+        functions = self.procedures["opaManagedFunctions"]
+        for check in (
+            "function->parent == component",
+            "member(localPin component->pins)",
+            "member(pin localPin->functionPins)",
+            "expected->parent->number == localPin->number",
+            "expected->swapCode == pin->swapCode",
+            "expected->use == pin->use",
+            "member(functionPin seen) && functionPin->pin == pin",
+        ):
+            self.assertIn(check, functions)
+        self.assertIn('list("functions" opaManagedFunctions(component))', self.procedures["opaManagedComponent"])
 
     def test_complete_stackup_includes_nonconductors_and_unrounded_material_values(self):
         stackup = self.procedures["opaManagedStackup"]

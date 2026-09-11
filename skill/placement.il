@@ -41,7 +41,11 @@ procedure(opaPairs(values)
 
 procedure(opaProps(object)
     let((values)
-        values = axlDBGetProperties(object)
+        ; Native logical/parameter objects without attached properties can
+        ; reject axlDBGetProperties even though their .prop is valid and nil.
+        when(object->prop
+            values = axlDBGetProperties(object)
+            opaRequire(values "Attached native properties could not be read."))
         ; Audit metadata changes on a save or with elapsed time, not with placement.
         values = setof(value values
             !member(car(value) '(VERSION_ID LAST_SAVED_NAME EDIT_TIME)))

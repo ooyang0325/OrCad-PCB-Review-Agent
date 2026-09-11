@@ -1,7 +1,7 @@
 ; Bounded imported-board model, not an import or library-loading interface.
 ; Requires placement.il primitives and the adapter's exact approval/state gate.
 ; Scope: embedded simple top SMT packages, rectangles/straight package linework,
-; no text or logical gate instances, default constraint sets and no routed copper.
+; mapped logical functions, bounded attachments, default constraints, no routed copper.
 ; Native acceptance is still required. Installed API evidence:
 ; DOC/FUNCS/axlDBCreateSymbol.txt, axlLoadSymbol.txt, axlDBRefreshId.txt,
 ; axlDbidDoc.txt, axlPadDbidDoc.txt and DOC/QIR/CHANGE/axlCmdRegister.txt.
@@ -10,6 +10,75 @@ procedure(opaManagedName(value)
     opaField(value)
     opaRequire(strlen(value) > 0 "An inventory name is empty.")
     value
+)
+
+procedure(opaManagedReadBytes(path maximum)
+    let((port value count chunks chunk)
+        opaRequire(fixp(maximum) && maximum >= 0 && maximum <= 65536
+            "Invalid native attachment byte limit.")
+        port = axlDMOpenFile("TEMP" path "rb")
+        opaRequire(port "Cannot read the extracted native attachment.")
+        count = 0
+        chunks = nil
+        chunk = ""
+        unwindProtect(
+            progn(
+                while(value = getc(port)
+                    value = charToInt(value)
+                    opaRequire(value >= 0 && value <= 255 && count < maximum
+                        "Expanded attachment bytes exceed the bounded native model.")
+                    chunk = strcat(chunk sprintf(nil "%02x" value))
+                    count = count + 1
+                    when(strlen(chunk) == 1024
+                        chunks = cons(chunk chunks)
+                        chunk = ""))
+                unless(chunk == "" chunks = cons(chunk chunks))
+                list(count reverse(chunks))
+            )
+            axlDMClose(port)
+        )
+    )
+)
+
+procedure(opaManagedAttachments()
+    let((names rows metadata attachment total expanded bytes path)
+        names = axlGetAllAttachmentNames()
+        opaRequire(length(names) <= 128 "Too many native board attachments.")
+        total = 0
+        expanded = 0
+        foreach(name opaSort(names)
+            opaManagedName(name)
+            opaRequire(!assoc(name rows) "Duplicate native attachment identifier.")
+            metadata = axlGetAttachment(name)
+            opaRequire(metadata && metadata->objType == "attachment" &&
+                metadata->id == name && fixp(metadata->size) &&
+                metadata->size >= 0 && metadata->size <= 65536
+                "Native attachment is missing or exceeds the 64 KiB bound.")
+            total = total + metadata->size
+            opaRequire(total <= 131072 "Native attachments exceed the 128 KiB total bound.")
+            ; String retrieval truncates binary attachments at NUL. Export to a
+            ; temporary file and preserve every byte, without changing the DB.
+            attachment = axlGetAttachment(name 'file)
+            opaRequire(attachment && attachment->id == name &&
+                attachment->dataFormat == 'file && stringp(attachment->data) &&
+                attachment->size == metadata->size && attachment->revision == metadata->revision
+                "Cannot extract the complete native attachment.")
+            path = attachment->data
+            unwindProtect(
+                progn(
+                    bytes = opaManagedReadBytes(path min(65536 131072 - expanded))
+                    expanded = expanded + car(bytes)
+                    ; 'file expands compressed attachments and omits text
+                    ; terminators. Preserve both native size and full exported
+                    ; bytes; the two lengths are not generally equal.
+                    rows = cons(list(name metadata->revision metadata->password metadata->size
+                        car(bytes) cadr(bytes)) rows)
+                )
+                opaRequire(deleteFile(path) "Cannot remove the extracted attachment temporary file.")
+            )
+        )
+        opaSortedData(rows)
+    )
 )
 
 procedure(opaManagedBox(box)
@@ -170,8 +239,8 @@ procedure(opaManagedPadstacks(design)
                 !stack->pluralVia && !stack->uvia && !stack->isPadRef &&
                 !stack->derived && !stack->multiDrillData &&
                 !stack->holeCounterType && !stack->backdrillDiameter &&
-                !stack->padSuppresion
-                "Duplicate, drilled, derived, suppressed or advanced padstack.")
+                member(stack->padSuppresion '(nil t))
+                "Duplicate, drilled, derived or advanced padstack.")
             pads = nil
             bounds = nil
             opaRequire(length(stack->pads) <= 128 "Oversized padstack.")
@@ -276,6 +345,48 @@ procedure(opaManagedCompdef(definition)
     )
 )
 
+procedure(opaManagedFunctions(component)
+    let((rows pins definitions definition matches expected seen localPin)
+        opaRequire(length(component->functions) <= 256 "Too many logical function instances.")
+        definitions = component->compdef->functions
+        foreach(function component->functions
+            opaManagedObjectGuard(function)
+            opaManagedName(function->name)
+            matches = setof(item definitions
+                item->slot == function->slot && item->type == function->type)
+            opaRequire(function->objType == "function" && function->parent == component &&
+                length(matches) == 1 && !assoc(function->name rows)
+                "Invalid, duplicate or unresolved logical function instance.")
+            definition = car(matches)
+            opaRequire(length(function->pins) == length(definition->pins)
+                "Logical function instance has an incomplete pin map.")
+            pins = nil
+            foreach(pin function->pins
+                opaManagedObjectGuard(pin)
+                localPin = pin->pin
+                opaRequire(pin->objType == "functionPin" && pin->parent == function &&
+                    member(localPin component->pins) && member(pin localPin->functionPins) &&
+                    !member(pin seen) && !assoc(pin->name pins)
+                    "Function pin has invalid component ownership or reverse association.")
+                matches = setof(item definition->pins item->name == pin->name)
+                opaRequire(length(matches) == 1 "Function pin definition is ambiguous.")
+                expected = car(matches)
+                opaRequire(expected->parent->number == localPin->number &&
+                    expected->swapCode == pin->swapCode && expected->use == pin->use
+                    "Function pin mapping differs from its protected logical definition.")
+                pins = cons(list(pin->name localPin->number pin->use pin->swapCode
+                    opaProps(pin) axlDBIsReadOnly(pin)) pins)
+                seen = cons(pin seen))
+            rows = cons(list(function->name function->slot function->type
+                opaSortedData(pins) opaProps(function) axlDBIsReadOnly(function)) rows))
+        foreach(pin component->pins
+            foreach(functionPin pin->functionPins
+                opaRequire(member(functionPin seen) && functionPin->pin == pin
+                    "A logical pin references an unaccounted function pin.")))
+        opaSortedData(rows)
+    )
+)
+
 procedure(opaManagedComponent(component definitions padstacks)
     let((definition symbol placed origin angle fixed bounds intrinsic geometry pins localPins
          nativePins pinDef netName padstack physicalPads expectedPads symbolState localGeometry
@@ -288,8 +399,8 @@ procedure(opaManagedComponent(component definitions padstacks)
             "Refdes is outside the exact-placement protocol.")
         definition = assoc(component->package definitions)
         opaRequire(definition && component->compdef &&
-            !component->functions && length(component->pins) == length(nth(2 definition))
-            "Missing embedded footprint, unsupported logical gate instances or pin mismatch.")
+            length(component->pins) == length(nth(2 definition))
+            "Missing embedded footprint or logical-to-physical pin mismatch.")
         symbol = component->symbol
         placed = if(symbol then t else nil)
         origin = '(0 0)
@@ -297,7 +408,8 @@ procedure(opaManagedComponent(component definitions padstacks)
         fixed = if(axlDBIsFixed(component) then t else nil)
         intrinsic = list(list("logical" component->package component->deviceType component->class
             opaManagedCompdef(component->compdef) opaProps(component)
-            axlDBIsReadOnly(component)))
+            axlDBIsReadOnly(component))
+            list("functions" opaManagedFunctions(component)))
         when(placed
             opaManagedObjectGuard(symbol)
             opaRequire(symbol->objType == "symbol" && symbol->component == component &&
@@ -328,12 +440,13 @@ procedure(opaManagedComponent(component definitions padstacks)
             nativePins = symbol->pins)
         foreach(pin component->pins
             opaManagedObjectGuard(pin)
-            opaRequire(!assoc(pin->number localPins) && !pin->functionPins
-                "Duplicate pin or unsupported logical gate-pin association.")
+            opaRequire(!assoc(pin->number localPins) "Duplicate logical pin.")
             pinDef = assoc(pin->number nth(2 definition))
             opaRequire(pinDef "Logical pin has no physical definition.")
             netName = if(pin->net then opaManagedName(pin->net->name) else "")
-            fixed = if(fixed || axlDBIsFixed(pin) then t else nil)
+            ; A physical pin is fixed against independent motion within its
+            ; package. The symbol query already checks fixed children and test
+            ; points; do not turn every ordinary package into a fixed component.
             localPins = cons(list(pin->number netName nth(2 pinDef)) localPins)
             intrinsic = cons(list("pin" pin->number netName pin->use opaProps(pin)
                 axlDBIsReadOnly(pin)) intrinsic)
@@ -379,7 +492,8 @@ procedure(opaManagedStackup(layers)
         foreach(entry entries
             opaRequire(entry->objType == "xsection" && !member(entry->position seen) &&
                 !entry->negativeArtwork &&
-                member(entry->layerType '("SURFACE" "CONDUCTOR" "DIELECTRIC" "MASK")) &&
+                (member(entry->layerType '("SURFACE" "CONDUCTOR" "DIELECTRIC" "MASK")) ||
+                    (!entry->layerType && entry->layerFunction == "SURFACE" && !entry->conductor)) &&
                 member(entry->embedded '(nil "NOT_EMBEDDED")) &&
                 member(entry->embeddedAttach '(nil "" "DIRECT_ATTACH" "INDIRECT_ATTACH")) &&
                 member(entry->freqDepFile '(nil ""))
@@ -498,7 +612,9 @@ procedure(opaManagedNetData(design components)
             foreach(rat net->ratsnest
                 opaManagedObjectGuard(rat)
                 opaRequire(rat->objType == "ratsnest" && !rat->userDefined &&
-                    !rat->ratsPlaced && !opaProps(rat) "User-scheduled ratsnest is unsupported.")
+                    member(rat->ratsPlaced '(nil t)) && !opaProps(rat) sprintf(nil
+                        "Unsupported ratsnest: type=%L userDefined=%L ratsPlaced=%L properties=%L"
+                        rat->objType rat->userDefined rat->ratsPlaced opaProps(rat)))
                 pins = nil
                 foreach(pin rat->pins
                     opaRequire(pin->objType == "pin" && pin->component && pin->net == net &&
@@ -509,7 +625,7 @@ procedure(opaManagedNetData(design components)
                     pins = cons(list(pin->component->name pin->number) pins))
                 opaRequire(length(pins) == 2 "Ratsnest does not have two logical pins.")
                 rats = cons(list(opaSortedData(pins) rat->pinsConnected rat->bus
-                    rat->pwrAndGnd) rats))
+                    rat->pwrAndGnd rat->ratsPlaced) rats))
             rows = cons(list(net->name opaSortedData(branches) opaSortedData(rats)
                 net->nBranches net->unconnected net->unplaced) rows))
         foreach(data components
@@ -642,13 +758,16 @@ procedure(opaManagedReadFrame()
         opaRequire(design && equal(units '("millimeters" 4 10000))
             "Managed boards require millimeters/4/10000.")
         opaManagedObjectGuard(design)
-        opaRequire(!design->groups && !design->module && !design->zone && !design->region &&
-            !design->netclass && !design->netgroup && !design->netGroup &&
-            !design->bus && !design->diffpair &&
-            !design->matchgroup && !design->ecsets && !design->text && !design->pins &&
-            !design->keepinRoute && !design->koGroup && !axlDBGetLonelyBranches() &&
-            !axlGetAllAttachmentNames()
-            "Unsupported routing, groups, regions, attachments or constraint topology.")
+        foreach(check list(
+            list("groups" !design->groups) list("module" !design->module)
+            list("zone" !design->zone) list("region" !design->region)
+            list("netclass" !design->netclass) list("netgroup" !design->netgroup)
+            list("netGroup" !design->netGroup) list("bus" !design->bus)
+            list("diffpair" !design->diffpair) list("matchgroup" !design->matchgroup)
+            list("ecsets" !design->ecsets) list("text" !design->text)
+            list("pins" !design->pins) list("keepinRoute" !design->keepinRoute)
+            list("koGroup" !design->koGroup) list("lonely branches" !axlDBGetLonelyBranches()))
+            opaRequire(cadr(check) strcat("Unsupported managed-board feature: " car(check))))
         opaRequire(length(design->components) >= 1 && length(design->components) <= 256 &&
             length(design->compdefs) >= 1 && length(design->compdefs) <= 256 &&
             length(design->nets) <= 4096
@@ -660,7 +779,8 @@ procedure(opaManagedReadFrame()
         definitions = opaManagedDefinitions(design padstacks)
         compdefs = opaSortedData(foreach(mapcar definition design->compdefs
             opaManagedCompdef(definition)))
-        common = list(list("padstacks" padstacks) list("definitions" definitions)
+        common = list(list("attachments" opaManagedAttachments())
+            list("padstacks" padstacks) list("definitions" definitions)
             list("compdefs" compdefs) list("rules" opaManagedConstraints())
             list("property-dictionary" opaManagedPropertyDictionary())
             list("board" opaBoardPath units axlVersion('fullVersion) opaProps(design)
