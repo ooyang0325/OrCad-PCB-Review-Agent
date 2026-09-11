@@ -71,10 +71,11 @@ def propose(
         raise ProtocolError("Target component is missing.")
     component = components[refdes]
     managed = any(row == ("model", "managed-board-v1") for row in snapshot.records)
+    board = None
     if managed:
         from .board import from_receipt
 
-        from_receipt(snapshot)
+        board = from_receipt(snapshot)
     if component.fixed or component.mirrored or (not component.placed and not managed):
         raise ProtocolError("Target must be unfixed/top-side; initial placement needs a complete managed-board snapshot.")
     scale = number(snapshot.one("units")[3])
@@ -85,6 +86,14 @@ def propose(
         raise ProtocolError("The initial fixture supports only 0/90/180/270 degree targets.")
     if component.placed and (target_x, target_y, target_angle) == (component.x, component.y, component.angle):
         raise ProtocolError("Proposal is a no-op.")
+    if board is not None and "outline_boundary" in board:
+        from .boundaries import board_boundaries, footprint_box
+
+        target = next(part for part in board["components"] if part["refdes"] == refdes)
+        box = footprint_box(tuple(number(value) for value in target["bounds"]),
+                            target_x, target_y, decimal_text(target_angle))
+        if not all(boundary.contains_box(box) for boundary in board_boundaries(board)):
+            raise ProtocolError("Target footprint crosses the native outline/keepin contour or approximation margin.")
     proposal: dict[str, object] = {
         "schema_version": 1,
         "nonce": session.nonce,

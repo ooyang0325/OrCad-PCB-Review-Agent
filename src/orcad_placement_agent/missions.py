@@ -76,6 +76,7 @@ import re
 import time
 
 from .protocol import ProtocolError, canonical_digest, number
+from .boundaries import board_boundaries, footprint_box
 
 
 MAX_COMPONENTS = 256
@@ -172,7 +173,7 @@ def _board(value):
     _object(value, {
         "model", "board", "snapshot_id", "scene_digest", "outline", "keepin",
         "keepouts", "layers", "components",
-    })
+    }, {"outline_boundary", "keepin_boundary"})
     if value["model"] != "managed-board-v1":
         raise MissionError("A managed-board-v1 native model is required.")
     path = _string(value["board"], maximum=4096)
@@ -188,7 +189,16 @@ def _board(value):
         "keepouts": sorted(_rectangle(item) for item in _list(value["keepouts"], MAX_REGIONS)),
         "layers": list(layers),
     }
-    if not _inside(_box(result["keepin"]), _box(result["outline"]), Decimal(0)):
+    contour_keys = {"outline_boundary", "keepin_boundary"} & value.keys()
+    if contour_keys and len(contour_keys) != 2:
+        raise MissionError("Both outline and keepin contours are required in a polygon board.")
+    if contour_keys:
+        try:
+            for role, boundary in zip(("outline", "keepin"), board_boundaries(value)):
+                result[role + "_boundary"] = boundary.to_dict()
+        except ProtocolError as error:
+            raise MissionError(str(error)) from error
+    elif not _inside(_box(result["keepin"]), _box(result["outline"]), Decimal(0)):
         raise MissionError("Native keepin must lie inside the native outline.")
     components = []
     total_pins = 0
@@ -346,13 +356,7 @@ def _rotate(x, y, angle):
 
 
 def _bounds(part, pose):
-    x1, y1, x2, y2 = _box(part["bounds"])
-    corners = [_rotate(x, y, pose["angle"]) for x in (x1, x2) for y in (y1, y2)]
-    x, y = Decimal(pose["x"]), Decimal(pose["y"])
-    return (
-        x + min(point[0] for point in corners), y + min(point[1] for point in corners),
-        x + max(point[0] for point in corners), y + max(point[1] for point in corners),
-    )
+    return footprint_box(_box(part["bounds"]), Decimal(pose["x"]), Decimal(pose["y"]), pose["angle"])
 
 
 def _merge(first, second):
@@ -379,6 +383,7 @@ def _net_boxes(part, pose):
 def _identity(board):
     return {
         **{key: board[key] for key in ("model", "board", "outline", "keepin", "keepouts", "layers")},
+        **{key: board[key] for key in ("outline_boundary", "keepin_boundary") if key in board},
         "components": [
             {key: part[key] for key in ("refdes", "package", "fixed", "mirrored", "bounds", "pins")}
             for part in board["components"]
@@ -428,7 +433,7 @@ def _input_blockers(board, requirements):
 def _geometry_blockers(board, requirements, poses):
     parts = {part["refdes"]: part for part in board["components"]}
     clearance = Decimal(requirements["clearance_mm"])
-    boundary = _box(board["keepin"])
+    boundaries = board_boundaries(board)
     exclusions = [("keepout", str(index), _box(box)) for index, box in enumerate(board["keepouts"])]
     exclusions += [(region["kind"], region["name"], _box(region["bounds"]))
                    for region in requirements["reserved_regions"]]
@@ -447,8 +452,8 @@ def _geometry_blockers(board, requirements, poses):
             continue
         box = _bounds(parts[ref], pose)
         boxes[ref] = box
-        if not _inside(box, boundary, clearance):
-            report("outside_keepin", "Footprint violates keepin spacing.", refdes=ref)
+        if not all(boundary.contains_box(box, clearance) for boundary in boundaries):
+            report("outside_keepin", "Footprint violates the actual outline/keepin contour or spacing.", refdes=ref)
         for kind, name, obstacle in exclusions:
             if _collides(box, obstacle, clearance):
                 report("reserved_collision", "Footprint violates an exclusion region.",
@@ -556,6 +561,7 @@ class _Search:
         self.nodes = 0
         self.leaf_budget_failures = 0
         self.clearance = Decimal(requirements["clearance_mm"])
+        self.boundaries = board_boundaries(board)
         self.groups = {ref: group["name"] for group in requirements["functional_groups"] for ref in group["refdes"]}
         self.critical = set(requirements["critical_nets"])
         self.pin_offsets = {
@@ -575,7 +581,14 @@ class _Search:
 
     def domain(self, ref, obstacles):
         part = self.parts[ref]
-        boundary = _box(self.board["keepin"])
+        # Limit the grid with extents, then test every footprint against both
+        # complete contours. A larger keepin never permits an off-board pose.
+        boundary = (
+            max(item.bounds[0] + item.error for item in self.boundaries),
+            max(item.bounds[1] + item.error for item in self.boundaries),
+            min(item.bounds[2] - item.error for item in self.boundaries),
+            min(item.bounds[3] - item.error for item in self.boundaries),
+        )
         grid = Decimal(self.requirements["grid_mm"])
         domain = []
         for angle in ANGLES:
@@ -595,7 +608,8 @@ class _Search:
                     if abs(x) >= Decimal(1000000000) or abs(y) >= Decimal(1000000000):
                         continue
                     box = (x + local[0], y + local[1], x + local[2], y + local[3])
-                    if not any(_collides(box, obstacle, self.clearance) for obstacle in obstacles):
+                    if (all(item.contains_box(box, self.clearance) for item in self.boundaries)
+                            and not any(_collides(box, obstacle, self.clearance) for obstacle in obstacles)):
                         domain.append((x, y, angle, box))
         return domain
 

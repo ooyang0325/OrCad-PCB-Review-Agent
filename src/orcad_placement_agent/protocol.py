@@ -175,7 +175,8 @@ class Receipt:
         allowed = {"board": 2, "units": 4, "version": 2, "component": 9,
                    "scene": 2, "snapshot": 2, "saved": 2, "scene-part": 3,
                    "model": 2, "outline": 5, "keepin": 5, "keepout": 5,
-                   "bounds": 6, "pin": 6, "layer": 2}
+                   "bounds": 6, "pin": 6, "layer": 2, "boundary-model": 2,
+                   "boundary": 4, "boundary-point": 5}
         for record in records:
             if record[0] not in allowed or len(record) != allowed[record[0]]:
                 raise ProtocolError("Unsupported receipt record.")
