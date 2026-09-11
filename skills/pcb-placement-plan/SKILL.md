@@ -58,6 +58,11 @@ blockers. Use `pcb_prepare_next_placement` with the top-level mission handle
 to prepare one remaining component from fresh state. Coverage comes from
 `pcb_placement_status`, never from the plan or dispatch count.
 
+For nonrectangular boards, use complete native outline/keepin contours and their
+approximation margins. Bounding rectangles and four inside corners are not
+whole-footprint containment in a concavity. Never simplify the user's boundary
+or delete unrelated unsupported objects to force a placement.
+
 After an inspection timeout, use `pcb_inspection_status` and reconcile only its
 exact read-only request ID. Never retry a placement to recover an image.
 

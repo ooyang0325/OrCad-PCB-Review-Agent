@@ -17,6 +17,8 @@ def backend_capabilities() -> dict[str, object]:
         "initial_component_placement": True,
         "initial_placement_model": "managed-board-v1",
         "placement_missions": True,
+        "nonrectangular_outline": True,
+        "outline_model": "polygon-v1: one simple line/circular-arc contour, no holes or islands",
         "move_existing_component": True,
         "rotate_existing_component": True,
         "supported_target_angles": [0, 90, 180, 270],
@@ -33,7 +35,8 @@ def backend_capabilities() -> dict[str, object]:
         "portable_writes_enabled_by_default": False,
         "initial_placement_requirements": (
             "Explicit managed-board-v1 staging; nonempty imported logical inventory and embedded simple "
-            "top-side SMT footprints; rectangular boundaries; millimeters/4/10000; no routing, text, "
+            "top-side SMT footprints; simple closed outline/keepin contours and rectangular keepouts; "
+            "millimeters/4/10000; no routing, text, "
             "unmapped logical functions, groups, advanced pads, or nondefault constraint topology. "
             "Native attachments must be readable within the bounded exported-byte model. "
             "Missing definitions and raw empty-design import remain explicit intake blockers. "

@@ -83,6 +83,9 @@ For stored missions, read `docs\placement-missions.md` and use
 `pcb_placement_status` for current coverage. Check complete target geometry,
 protected parts, DNP reconciliation, reserved regions and pin-based metrics.
 HPWL screening is not escape, reference-plane or routed-length proof.
+For polygon outlines, verify complete contour and approximation-margin evidence;
+bounding-box fit and four inside corners are insufficient for concave notches.
+Both the actual outline and the keepin must contain each full footprint.
 No approval token, checksum, DRC count, or agent opinion substitutes for
 explicit user approval and the existing native checks.
 

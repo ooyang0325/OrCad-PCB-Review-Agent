@@ -97,6 +97,11 @@ or use the coordinator's exact stored mission. Review the complete target set.
 Use `pcb_prepare_next_placement` to prepare one remaining target from fresh
 readback; a blocked or partial plan is not executable completion.
 
+For nonrectangular boards, read `docs\nonrectangular-outlines.md` and use the
+complete native outline/keepin contours and their error margins. A bounding
+rectangle or four inside footprint corners cannot establish containment across
+a concave notch. Do not remove unsupported board features to force acceptance.
+
 When an exact candidate is sufficiently supported and within the selected model's
 scope, use `pcb_prepare_placement`. Inspect its returned current PNG and cite
 the proposal identifier, target pose and visual observation in your handoff.

@@ -59,6 +59,12 @@ designs. It starts with a known imported logical inventory and embedded simple
 SMT footprints, including zero physically placed components. Native acceptance
 of this new model remains pending; Python/fake-editor tests are not that proof.
 
+[Nonrectangular outlines](docs/nonrectangular-outlines.md) are checked as
+complete simple contours, including concave notches and bounded circular-arc
+approximation. Both native gates and planning reject footprint crossings;
+the outline's bounding rectangle is not treated as usable board area.
+Other footprint, routing and native-approval limitations still apply.
+
 The supplied `doc` manuals and `pcb_design_book` references remain local-only.
 Do not commit them, vendor libraries, or native working board files.
 The user-supplied `design` directory also remains local-only.

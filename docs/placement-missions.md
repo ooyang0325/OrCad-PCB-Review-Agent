@@ -15,8 +15,9 @@ silently ignored. Native acceptance is separate from Python/fake-editor tests.
 
 The implementation accepts 1-256 logical components with embedded, matching
 PACKAGE definitions; zero or more may be physically placed. It requires
-millimeters/4/10000, top-side orthogonal poses, rectangular outline/keepin/top
-keepouts, straight supported package linework and simple rectangular, square
+millimeters/4/10000, top-side orthogonal poses, simple closed
+[nonrectangular outline/keepin contours](nonrectangular-outlines.md), rectangular
+top keepouts, straight supported package linework and simple rectangular, square
 or circular SMT pads. A PRIMARY stackup may have 2-32 positive conductor
 layers. Required placement DRC must already be enabled and current.
 
@@ -26,7 +27,7 @@ preserved read-only as complete exported bytes plus native metadata, never
 deleted from the board; stored and expanded sizes are bounded separately.
 
 Missing/unloaded footprints, text, unmapped logical functions, mechanical-only
-symbols, through-hole/complex pads, curved/nonrectangular shapes, routed copper,
+symbols, through-hole/complex pads, unsupported package shapes, routed copper,
 groups/regions, oversized/unreadable attachments and nondefault constraint topology are rejected.
 Do not remove design information or silently substitute a simpler board to
 force acceptance. These are implementation limits, not evidence that Cadence

@@ -1,5 +1,31 @@
 # Live acceptance status
 
+## Nonrectangular outline acceptance
+
+Version 0.6.0 adds explicit simple outline/keepin contours to native snapshots
+and placement missions. A separate read-only Cadence 25.1 S050 session passed
+native contour checks for concavities, a notch between four inside corners,
+approximation margins, invalid contours, arc direction/radius and edge-chain
+ordering. Source and working-board bytes and pre/post native scene were
+unchanged during those checks.
+
+The provided `design\howto_agent_placement\allegro\howto.brd` was then copied
+to a separate staged directory and opened **read-only**, not edited in place.
+An outline-only native report successfully read **214 outline vertices and
+194 keepin vertices**, each carrying a **0.0012 mm** arc approximation margin.
+This exposed and fixed native `atan2` returning a negative semicircle angle
+for signed-zero input. The exported contours passed the Python reader and
+rejected a test rectangle lying in the outline bounding box but outside the
+actual board. A guarded display-only fit and window-only capture showed the
+provided design's nonrectangular boundary.
+
+This is geometry-reader/containment evidence, **not placement acceptance for
+the entire howto design**. Its full managed-board handshake still rejects
+unsupported `groups` before placement. No grouping, footprint, routing or
+other design data was removed to force acceptance. No Apply, Save, source
+overwrite, or write approval was performed. See
+[nonrectangular outline scope](nonrectangular-outlines.md).
+
 ## Managed-board mission implementation
 
 The new experimental managed-board-v1 model implements initial placement and
