@@ -31,7 +31,7 @@ def _snapshot_context(path: Path) -> dict[str, object]:
     data = json.loads(path.read_text(encoding="utf-8"))
     receipt = Receipt.from_dict(data)
     components = check_snapshot(receipt)
-    return {
+    result = {
         "artifact": str(path.resolve()), "request_id": receipt.request_id,
         "snapshot_id": receipt.one("snapshot")[1], "board": receipt.one("board")[1],
         "units": receipt.one("units")[1], "editor_version": receipt.one("version")[1],
@@ -47,6 +47,18 @@ def _snapshot_context(path: Path) -> dict[str, object]:
             "Do not interpret the native compressed scene as verified electrical design intent.",
         ],
     }
+    if any(row == ("model", "managed-board-v1") for row in receipt.records):
+        from .board import from_receipt
+
+        board = from_receipt(receipt)
+        result["native_model"] = board["model"]
+        result["geometry"] = {key: board[key] for key in (
+            "outline", "keepin", "keepouts", "layers", "outline_boundary", "keepin_boundary",
+        ) if key in board}
+        result["limitations"].append(
+            "Outline/keepin extents are not usable area for nonrectangular boards; use complete contours and their error margins."
+        )
+    return result
 
 
 def _visual_context(path: Path) -> tuple[dict[str, object], Path]:

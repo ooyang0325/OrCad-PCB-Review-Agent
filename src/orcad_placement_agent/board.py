@@ -2,7 +2,7 @@
 
 import re
 
-from .protocol import ProtocolError, Receipt, decimal_text, identifier, number
+from .protocol import ProtocolError, Receipt, canonical_digest, decimal_text, identifier, number
 from .boundaries import MAX_VERTICES, board_boundaries
 
 
@@ -37,6 +37,7 @@ def from_receipt(receipt: Receipt) -> dict[str, object]:
     layers = []
     contours = {}
     vertices = {"outline": [], "keepin": []}
+    sources = {"outline": [], "keepin": []}
     for row in receipt.records:
         if row[0] == "component":
             refdes = row[1]
@@ -71,13 +72,20 @@ def from_receipt(receipt: Receipt) -> dict[str, object]:
                 raise ProtocolError("Unknown or duplicate native contour.")
             if not row[2].isdigit() or not 3 <= int(row[2]) <= MAX_VERTICES:
                 raise ProtocolError("Native contour vertex count is invalid.")
-            contours[row[1]] = (int(row[2]), row[3])
+            if not row[4].isdigit() or not 2 <= int(row[4]) <= MAX_VERTICES:
+                raise ProtocolError("Native contour source-edge count is invalid.")
+            contours[row[1]] = (int(row[2]), row[3], int(row[4]))
         elif row[0] == "boundary-point":
             if row[1] not in vertices or row[2] != str(len(vertices[row[1]])):
                 raise ProtocolError("Native contour vertices are unknown, missing, duplicated or out of order.")
             if len(vertices[row[1]]) >= MAX_VERTICES:
                 raise ProtocolError("Native contour exceeds the vertex bound.")
             vertices[row[1]].append([row[3], row[4]])
+        elif row[0] == "boundary-source":
+            if (row[1] not in sources or row[2] != str(len(sources[row[1]]))
+                    or not row[3] or len(sources[row[1]]) >= MAX_VERTICES):
+                raise ProtocolError("Native contour source edges are incomplete, duplicated or out of order.")
+            sources[row[1]].append(row[3])
     if not 1 <= len(components) <= 256 or set(bounds) != set(components):
         raise ProtocolError("A known nonempty inventory with bounds for every component is required.")
     if not {"TOP", "BOTTOM"} <= set(layers):
@@ -99,12 +107,15 @@ def from_receipt(receipt: Receipt) -> dict[str, object]:
     if any(row[0] == "boundary-model" for row in receipt.records):
         if receipt.one("boundary-model") != ("boundary-model", "polygon-v1") or set(contours) != set(vertices):
             raise ProtocolError("Native boundary model is unsupported or incomplete.")
-        for role, (count, error) in contours.items():
-            if len(vertices[role]) != count:
+        for role, (count, error, source_count) in contours.items():
+            if len(vertices[role]) != count or len(sources[role]) != source_count:
                 raise ProtocolError("Native contour is incomplete.")
-            result[role + "_boundary"] = {"vertices": vertices[role], "error_mm": error}
+            result[role + "_boundary"] = {
+                "vertices": vertices[role], "error_mm": error,
+                "source_digest": canonical_digest({"edges": sources[role]}),
+            }
         for role, boundary in zip(("outline", "keepin"), board_boundaries(result)):
             result[role + "_boundary"] = boundary.to_dict()
-    elif contours or any(vertices.values()):
+    elif contours or any(vertices.values()) or any(sources.values()):
         raise ProtocolError("Contour data lacks an explicit native boundary model.")
     return result

@@ -747,6 +747,277 @@ procedure(opaManagedRecordBudget(records)
     )
 )
 
+procedure(opaManagedBoundaryPoly(object)
+    let((path polygons)
+        opaRequire(!object->voids && !object->isHole
+            "Boundary holes must not be discarded by path conversion.")
+        path = axlDB2Path(object)
+        opaRequire(path "Native boundary could not be converted to a closed path.")
+        polygons = axlPolyFromDB(path)
+        opaRequire(polygons && length(polygons) == 1 && car(polygons) &&
+            !car(polygons)->isHole && !car(polygons)->holes &&
+            abs(car(polygons)->area) > 0.0
+            "Native boundary is not one valid simple closed interior.")
+        car(polygons)
+    )
+)
+
+procedure(opaManagedBoundary(object)
+    let((edges endpoints center sx sy ex ey radius data box fill)
+        opaManagedObjectGuard(object)
+        opaRequire(member(object->objType '("shape" "polygon")) &&
+            member(object->layer '("BOARD GEOMETRY/DESIGN_OUTLINE"
+                "BOARD GEOMETRY/OUTLINE" "PACKAGE KEEPIN/ALL")) &&
+            object->nSegs == length(object->segments) &&
+            length(object->segments) >= 2 && length(object->segments) <= 512 &&
+            !object->voids && !object->net && !object->branch && !object->symbolEtch &&
+            !object->shapeBoundary && !object->shapeIsBoundary && !object->shapeAuto &&
+            !object->cavity && !object->isHole && !object->fillet &&
+            !object->taper && !object->dynamicGroup
+            "Outline/keepin must be one static simple closed contour without holes.")
+        box = opaManagedBox(object->bBox)
+        fill = if(object->objType == "polygon" then nil else object->fill)
+        opaRequire(member(fill '(nil t)) "Hatched board boundaries are unsupported.")
+        foreach(segment object->segments
+            opaManagedObjectGuard(segment)
+            opaRequire(member(segment->objType '("line" "arc")) &&
+                segment->width == 0.0 && !segment->isEtch &&
+                segment->parent == object
+                "Boundary edges must be owned zero-width lines or circular arcs.")
+            endpoints = foreach(mapcar point segment->startEnd opaPoint(point))
+            opaRequire(length(endpoints) == 2 && !equal(car(endpoints) cadr(endpoints))
+                "Boundary edge is degenerate or a full circle.")
+            if(segment->objType == "arc" then
+                opaRequire(!segment->isCircle && member(segment->isClockwise '(nil t))
+                    "Unsupported full circle or ambiguous arc direction.")
+                center = opaPoint(segment->xy)
+                sx = 1.0 * (caar(endpoints) - car(center))
+                sy = 1.0 * (cadar(endpoints) - cadr(center))
+                ex = 1.0 * (caadr(endpoints) - car(center))
+                ey = 1.0 * (cadadr(endpoints) - cadr(center))
+                radius = max(sqrt(sx * sx + sy * sy) sqrt(ex * ex + ey * ey))
+                edges = cons(list("arc" car(endpoints) cadr(endpoints) center
+                    segment->isClockwise radius
+                    list(segment->font segment->isCircle opaProps(segment))) edges)
+            else
+                edges = cons(list("line" car(endpoints) cadr(endpoints) nil nil nil
+                    list(segment->font nil opaProps(segment))) edges)))
+        opaManagedBoundaryPoly(object)
+        data = opaManagedContourFromEdges(edges)
+        foreach(point cadr(data)
+            opaRequire(car(point) >= caar(box) - caddr(data) &&
+                car(point) <= caadr(box) + caddr(data) &&
+                cadr(point) >= cadar(box) - caddr(data) &&
+                cadr(point) <= cadadr(box) + caddr(data)
+                "Boundary sampling disagrees with native extents."))
+        list(object->objType object->layer fill box car(data) opaProps(object)
+            cadr(data) caddr(data))
+    )
+)
+
+procedure(opaManagedArcPoints(edge)
+    let((start finish center clockwise radius sx sy ex ey startRadius endRadius
+         dot cross theta divisions points angle x y count)
+        start = nth(1 edge)
+        finish = nth(2 edge)
+        center = nth(3 edge)
+        clockwise = nth(4 edge)
+        radius = nth(5 edge)
+        opaRequire(numberp(radius) && radius > 0.0 && radius <= 200000000.0 &&
+            !equal(start finish) "Degenerate or full-circle boundary arc is unsupported.")
+        sx = 1.0 * (car(start) - car(center))
+        sy = 1.0 * (cadr(start) - cadr(center))
+        ex = 1.0 * (car(finish) - car(center))
+        ey = 1.0 * (cadr(finish) - cadr(center))
+        startRadius = sqrt(sx * sx + sy * sy)
+        endRadius = sqrt(ex * ex + ey * ey)
+        opaRequire(startRadius > 0.0 && endRadius > 0.0 &&
+            abs(startRadius - radius) <= 1.0 && abs(endRadius - radius) <= 1.0
+            "Arc endpoints disagree with the native radius.")
+        dot = sx * ex + sy * ey
+        cross = sx * ey - sy * ex
+        ; atan2 avoids acos cancellation for very short, large-radius arcs.
+        theta = abs(atan2(cross dot))
+        when((clockwise && cross > 0.0) || (!clockwise && cross < 0.0)
+            theta = 6.283185307179586 - theta)
+        opaRequire(theta > 0.0 && theta < 6.283185307179586 sprintf(nil
+            "Ambiguous boundary arc sweep: start=%L end=%L center=%L clockwise=%L angle=%L"
+            start finish center clockwise theta))
+        ; r*(sweep/n)^2/8 bounds sagitta. Reserve 8 DBUs for sagitta
+        ; and 4 more for endpoint tolerance, DBU rounding and numeric error.
+        divisions = max(1 fix(sqrt(radius * theta * theta / 64.0)) + 1
+            fix(theta / 1.5707963267948966) + 1)
+        opaRequire(divisions <= 512 "Boundary arc exceeds the vertex budget.")
+        opaRequire(radius * theta * theta / (8.0 * divisions * divisions) <= 8.0
+            "Boundary arc subdivision did not establish the error bound.")
+        points = list(start)
+        for(index 1 divisions - 1
+            angle = theta * index / divisions
+            when(clockwise angle = -angle)
+            x = car(center) + sx * cos(angle) - sy * sin(angle)
+            y = cadr(center) + sx * sin(angle) + sy * cos(angle)
+            points = append(points list(list(round(x) round(y)))))
+        points
+    )
+)
+
+procedure(opaManagedContourFromEdges(edges)
+    let((remaining first current ordered matches edge reversed vertices points margin)
+        opaRequire(length(edges) >= 2 && length(edges) <= 512
+            "Boundary needs 2-512 native edges.")
+        remaining = opaSortedData(edges)
+        first = nth(1 car(remaining))
+        current = first
+        while(remaining
+            matches = setof(item remaining
+                equal(nth(1 item) current) || equal(nth(2 item) current))
+            opaRequire(length(matches) == if(ordered then 1 else 2)
+                "Boundary has gaps, branches or multiple disconnected contours.")
+            edge = car(matches)
+            when(!equal(nth(1 edge) current)
+                edge = list(car(edge) nth(2 edge) nth(1 edge) nth(3 edge)
+                    if(car(edge) == "arc" then !nth(4 edge) else nil)
+                    nth(5 edge) nth(6 edge)))
+            remaining = remove(car(matches) remaining)
+            ordered = append(ordered list(edge))
+            current = nth(2 edge)
+            when(equal(current first)
+                opaRequire(!remaining "Boundary closes before accounting for all edges.")))
+        opaRequire(equal(current first) "Boundary is not closed.")
+        margin = 0
+        foreach(edge ordered
+            if(car(edge) == "arc" then
+                points = opaManagedArcPoints(edge)
+                margin = 12
+            else
+                opaRequire(car(edge) == "line" "Unknown boundary edge kind.")
+                points = list(nth(1 edge)))
+            opaRequire(length(vertices) + length(points) <= 512
+                "Complete boundary exceeds 512 vertices; no truncation is permitted.")
+            vertices = append(vertices points))
+        opaManagedContourValidate(vertices)
+        list(ordered vertices margin)
+    )
+)
+
+procedure(opaManagedContourCross(a b c)
+    ; Coordinates are integral DBUs; bounded spans keep these products exact
+    ; in binary64 without depending on SKILL fixnum multiplication overflow.
+    (1.0 * (car(b) - car(a))) * (cadr(c) - cadr(a)) -
+        (1.0 * (cadr(b) - cadr(a))) * (car(c) - car(a))
+)
+
+procedure(opaManagedContourOnSegment(a b point)
+    opaManagedContourCross(a b point) == 0.0 &&
+        car(point) >= min(car(a) car(b)) && car(point) <= max(car(a) car(b)) &&
+        cadr(point) >= min(cadr(a) cadr(b)) && cadr(point) <= max(cadr(a) cadr(b))
+)
+
+procedure(opaManagedContourIntersects(a b c d)
+    let((ac ad ca cb)
+        ac = opaManagedContourCross(a b c)
+        ad = opaManagedContourCross(a b d)
+        ca = opaManagedContourCross(c d a)
+        cb = opaManagedContourCross(c d b)
+        ((ac < 0.0 && ad > 0.0 || ac > 0.0 && ad < 0.0) &&
+         (ca < 0.0 && cb > 0.0 || ca > 0.0 && cb < 0.0)) ||
+        opaManagedContourOnSegment(a b c) || opaManagedContourOnSegment(a b d) ||
+        opaManagedContourOnSegment(c d a) || opaManagedContourOnSegment(c d b)
+    )
+)
+
+procedure(opaManagedContourValidate(vertices)
+    let((count a b c d area xs ys)
+        count = length(vertices)
+        opaRequire(count >= 3 && count <= 512 "Boundary needs 3-512 vertices.")
+        xs = foreach(mapcar point vertices car(point))
+        ys = foreach(mapcar point vertices cadr(point))
+        opaRequire(apply('max xs) - apply('min xs) <= 67108863 &&
+            apply('max ys) - apply('min ys) <= 67108863
+            "Boundary span exceeds exact native containment arithmetic.")
+        area = 0.0
+        for(i 0 count - 1
+            a = nth(i vertices)
+            b = nth(mod(i + 1 count) vertices)
+            c = nth(mod(i + 2 count) vertices)
+            opaRequire(!equal(a b) "Boundary has a zero-length edge.")
+            opaRequire(opaManagedContourCross(a b c) != 0.0 ||
+                (1.0 * (car(b) - car(a))) * (car(c) - car(b)) +
+                (1.0 * (cadr(b) - cadr(a))) * (cadr(c) - cadr(b)) > 0.0
+                "Boundary doubles back along an adjacent edge.")
+            area = area + opaManagedContourCross(car(vertices) a b)
+            for(j i + 1 count - 1
+                unless(j == i + 1 || (i == 0 && j == count - 1)
+                    c = nth(j vertices)
+                    d = nth(mod(j + 1 count) vertices)
+                    opaRequire(!opaManagedContourIntersects(a b c d)
+                        "Boundary is self-intersecting or self-touching."))))
+        opaRequire(abs(area) >= 1.0 "Boundary area is degenerate.")
+        vertices
+    )
+)
+
+procedure(opaManagedContourPoint(vertices point)
+    let((inside touching a b cross)
+        for(i 0 length(vertices) - 1
+            a = nth(i vertices)
+            b = nth(mod(i + 1 length(vertices)) vertices)
+            cross = opaManagedContourCross(a b point)
+            when(opaManagedContourOnSegment(a b point) touching = t)
+            when((cadr(a) > cadr(point)) != (cadr(b) > cadr(point))
+                when((cross > 0.0) == (cadr(b) > cadr(a)) inside = !inside)))
+        inside || touching
+    )
+)
+
+procedure(opaManagedContourCutsBox(a b box)
+    let((corners sides)
+        when(max(car(a) car(b)) > caar(box) && min(car(a) car(b)) < caadr(box) &&
+             max(cadr(a) cadr(b)) > cadar(box) && min(cadr(a) cadr(b)) < cadadr(box)
+            corners = list(car(box) cadr(box) list(caar(box) cadadr(box))
+                list(caadr(box) cadar(box)))
+            sides = foreach(mapcar point corners opaManagedContourCross(a b point))
+            apply('min sides) < 0.0 && apply('max sides) > 0.0)
+    )
+)
+
+procedure(opaManagedContourContains(box geometry)
+    let((vertices margin expanded corners inside)
+        vertices = nth(6 geometry)
+        margin = nth(7 geometry)
+        expanded = list(list(caar(box) - margin cadar(box) - margin)
+            list(caadr(box) + margin cadadr(box) + margin))
+        inside = opaManagedInside(expanded nth(3 geometry))
+        when(inside
+            corners = list(car(expanded) cadr(expanded)
+                list(caar(expanded) cadadr(expanded)) list(caadr(expanded) cadar(expanded)))
+            foreach(point corners
+                unless(opaManagedContourPoint(vertices point) inside = nil))
+            for(i 0 length(vertices) - 1
+                when(opaManagedContourCutsBox(nth(i vertices)
+                    nth(mod(i + 1 length(vertices)) vertices) expanded) inside = nil)))
+        inside
+    )
+)
+
+procedure(opaManagedContourRecords(role geometry)
+    let((rows vertices index)
+        vertices = nth(6 geometry)
+        rows = list(list("boundary" role sprintf(nil "%d" length(vertices))
+            opaCoordinate(nth(7 geometry)) sprintf(nil "%d" length(nth(4 geometry)))))
+        index = 0
+        foreach(point vertices
+            rows = append(rows list(list("boundary-point" role sprintf(nil "%d" index)
+                opaCoordinate(car(point)) opaCoordinate(cadr(point)))))
+            index = index + 1)
+        index = 0
+        foreach(edge nth(4 geometry)
+            rows = append(rows list(list("boundary-source" role sprintf(nil "%d" index) opaStable(edge))))
+            index = index + 1)
+        rows
+    )
+)
+
 procedure(opaManagedReadFrame()
     let((design units padstacks definitions compdefs common components records shapes boardShapes
          outline keepin keepouts legacy geometry placedCount shapeCount data nets drcs scene
@@ -813,7 +1084,8 @@ procedure(opaManagedReadFrame()
                 opaRequire(member(shape->layer '("BOARD GEOMETRY/DESIGN_OUTLINE"
                     "BOARD GEOMETRY/OUTLINE" "PACKAGE KEEPIN/ALL" "PACKAGE KEEPOUT/TOP"))
                     "Unsupported board-level shape layer.")
-                geometry = opaManagedGeometry(shape)
+                geometry = if(shape->layer == "PACKAGE KEEPOUT/TOP"
+                    then opaManagedGeometry(shape) else opaManagedBoundary(shape))
                 opaManagedBox(shape->bBox)
                 boardShapes = cons(shape boardShapes)
                 cond(
@@ -835,7 +1107,7 @@ procedure(opaManagedReadFrame()
                         opaRequire(shape->fill "Package keepouts must be filled rectangles.")
                         keepouts = cons(nth(3 geometry) keepouts)
                         common = cons(list("keepout" nth(3 geometry) geometry) common)))))
-        opaRequire(outline && keepin && opaManagedInside(keepin outline) &&
+        opaRequire(outline && keepin &&
             (!legacy || equal(legacy outline)) && length(keepouts) <= 256 &&
             length(shapes) == shapeCount + length(boardShapes)
             "Outline, keepin, keepouts or native shape inventory are incomplete.")
@@ -852,7 +1124,10 @@ procedure(opaManagedReadFrame()
         records = list(list("board" opaBoardPath) list("model" "managed-board-v1")
             list("units" car(units) sprintf(nil "%d" cadr(units)) sprintf(nil "%d" caddr(units)))
             list("version" axlVersion('fullVersion))
-            opaManagedBoxRecord("outline" outline) opaManagedBoxRecord("keepin" keepin))
+            opaManagedBoxRecord("outline" outline) opaManagedBoxRecord("keepin" keepin)
+            list("boundary-model" "polygon-v1"))
+        records = append(records opaManagedContourRecords("outline" caddr(assoc("outline" common))))
+        records = append(records opaManagedContourRecords("keepin" caddr(assoc("keepin" common))))
         foreach(box opaSortedData(keepouts)
             records = append(records list(opaManagedBoxRecord("keepout" box))))
         foreach(layer axlSubclassRoute()
@@ -888,14 +1163,15 @@ procedure(opaManagedWritesAllowed(frame)
 
 procedure(opaManagedPlacementPolicy(frame)
     let((outline keepin keepouts bounds others)
-        outline = cadr(assoc("outline" frame->common))
-        keepin = cadr(assoc("keepin" frame->common))
+        outline = caddr(assoc("outline" frame->common))
+        keepin = caddr(assoc("keepin" frame->common))
         keepouts = setof(row frame->common car(row) == "keepout")
         foreach(data frame->components
             when(nth(5 data)
                 bounds = nth(6 data)
-                opaRequire(opaManagedInside(bounds outline) && opaManagedInside(bounds keepin)
-                    "Conservative package/pad bounds leave the outline or keepin.")
+                opaRequire(opaManagedContourContains(bounds outline) &&
+                    opaManagedContourContains(bounds keepin)
+                    "Conservative package/pad bounds cross the actual outline/keepin contour.")
                 foreach(row keepouts
                     opaRequire(!opaOverlap(bounds cadr(row))
                         "Conservative package/pad bounds overlap a package keepout."))

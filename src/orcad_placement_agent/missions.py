@@ -17,7 +17,7 @@ Requirements (unknown keys/types are errors; missing inventories are blockers):
   after geometry checks or mission approval.
 * clearance_mm: required nonnegative plain-decimal string. This is the operator's
   geometric AABB spacing, NOT a derived electrical/safety clearance. The spacing
-  applies to the keepin boundary, keepouts, reservations, and other footprints.
+  applies to both outline/keepin contours, keepouts, reservations, and other footprints.
   Exact spacing is allowed; at zero spacing, rectangle edges may touch but
   positive-area intersections may not. Rectangles must have positive area.
 * anchors: optional list of {refdes, kind: "mechanical-interface", x, y, angle}.
@@ -47,6 +47,10 @@ The normalized managed-board-v1 schema is checked locally, including bounded
 finite decimal strings, orthogonal local footprint/pin geometry, and native
 identity. At most 256 components, 8192 total pins, and 128 exclusions of each
 kind are accepted. Inputs are not mutated. Malformed input raises MissionError.
+Optional paired outline_boundary/keepin_boundary fields contain complete simple
+polygons and their explicit error_mm. Their extents are used only for search;
+whole clearance-expanded footprints must remain inside both contours. A keepin
+may extend beyond the outline only with this explicit contour model.
 All existing placed poses (fixed or not) are protected. Expected unplaced fixed
 parts and mirrored parts are explicitly unsupported. DNPs are never candidates.
 
@@ -757,7 +761,7 @@ def _plan(board, requirements):
                 "optimality_proven": False,
             },
             "score": "Incremental critical-weighted pin HPWL, group span, occupied span, y, x, angle.",
-            "geometry": "Operator AABB spacing; not electrical clearance, escape or DRC verification.",
+            "geometry": "Whole AABB footprint containment in both outline/keepin contours, including approximation margins; not electrical clearance, escape or DRC verification.",
             "routing": _routing(board, requirements, solution if solution is not None else actual,
                                 scope="intended_poses" if solution is not None else "native_placed_poses"),
             "persistence": "unverified",

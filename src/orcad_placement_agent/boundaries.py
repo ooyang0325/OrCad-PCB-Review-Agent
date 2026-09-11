@@ -6,9 +6,10 @@ is added to the operator's geometric clearance, never subtracted. Bounding
 boxes are search accelerators, not evidence of containment in a concavity.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, localcontext
 from functools import lru_cache
+import re
 
 from .protocol import ProtocolError, decimal_text, number
 
@@ -68,6 +69,7 @@ class Boundary:
     vertices: tuple[Point, ...]
     error: Decimal
     bounds: Box
+    source_digest: str | None = None
 
     def contains_point(self, p: Point) -> bool:
         inside = False
@@ -98,8 +100,11 @@ class Boundary:
                            for a, b in zip(self.vertices, self.vertices[1:] + self.vertices[:1]))
 
     def to_dict(self) -> dict[str, object]:
-        return {"vertices": [[decimal_text(x), decimal_text(y)] for x, y in self.vertices],
-                "error_mm": decimal_text(self.error)}
+        result = {"vertices": [[decimal_text(x), decimal_text(y)] for x, y in self.vertices],
+                  "error_mm": decimal_text(self.error)}
+        if self.source_digest is not None:
+            result["source_digest"] = self.source_digest
+        return result
 
 
 @lru_cache(maxsize=64)
@@ -134,7 +139,8 @@ def _validated(points: tuple[Point, ...], error: Decimal) -> Boundary:
 
 
 def parse_boundary(value: object) -> Boundary:
-    if not isinstance(value, dict) or set(value) != {"vertices", "error_mm"}:
+    if (not isinstance(value, dict) or not {"vertices", "error_mm"} <= value.keys()
+            or set(value) - {"vertices", "error_mm", "source_digest"}):
         raise ProtocolError("Boundary requires only ordered vertices and an explicit error_mm.")
     vertices = value["vertices"]
     if not isinstance(vertices, list) or not 3 <= len(vertices) <= MAX_VERTICES:
@@ -147,7 +153,12 @@ def parse_boundary(value: object) -> Boundary:
     error = number(value["error_mm"])
     if not 0 <= error <= MAX_ERROR_MM:
         raise ProtocolError("Boundary approximation error must be between 0 and 0.01 mm.")
-    return _validated(tuple(points), error)
+    digest = value.get("source_digest")
+    if "source_digest" in value and (
+        not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+    ):
+        raise ProtocolError("Native boundary source identity must be a complete SHA256 digest.")
+    return replace(_validated(tuple(points), error), source_digest=digest)
 
 
 def board_boundaries(board: dict) -> tuple[Boundary, Boundary]:

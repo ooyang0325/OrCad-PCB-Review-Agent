@@ -5,10 +5,12 @@ import tempfile
 import unittest
 
 from orcad_placement_agent.boundaries import board_boundaries, parse_boundary
-from orcad_placement_agent.protocol import ProtocolError, Receipt
+from orcad_placement_agent.protocol import ProtocolError, Receipt, canonical_digest
 from orcad_placement_agent.board import from_receipt
 from orcad_placement_agent.missions import MissionError, mission_status, next_candidate, plan_mission
 from orcad_placement_agent.proposals import propose
+from orcad_placement_agent.advisory import _snapshot_context
+from orcad_placement_agent.session import write_json
 from tests.test_board import managed_snapshot
 from tests.test_missions import component, snapshot, requirements, fake_apply, fresh, codes
 
@@ -114,6 +116,18 @@ class BoundaryTests(unittest.TestCase):
         self.assertFalse(boundary.contains_box(tuple(offset + value for value in box(2, 2, 8, 8))))
         self.assertTrue(parse_boundary(contour([(0, 0), (5, 0), (10, 0), (10, 10), (0, 10)])))
 
+    def test_exhaustive_small_grid_agrees_with_analytic_concave_region(self):
+        boundary = parse_boundary(contour(L_SHAPE))
+        for x in range(-1, 13):
+            for y in range(-1, 13):
+                for width, height in ((1, 1), (2, 5), (5, 2), (6, 6)):
+                    for margin in (Decimal(0), Decimal("0.5")):
+                        expected = (x - margin >= 0 and y - margin >= 0
+                                    and x + width + margin <= 12 and y + height + margin <= 12
+                                    and (x + width + margin <= 4 or y + height + margin <= 4))
+                        self.assertEqual(boundary.contains_box(box(x, y, x + width, y + height), margin),
+                                         expected, (x, y, width, height, margin))
+
 
 class ContourProtocolTests(unittest.TestCase):
     def receipt(self):
@@ -122,16 +136,27 @@ class ContourProtocolTests(unittest.TestCase):
         records += [("outline", "0", "0", "12", "12"), ("keepin", "0", "0", "12", "12"),
                     ("boundary-model", "polygon-v1")]
         for role in ("outline", "keepin"):
-            records.append(("boundary", role, str(len(L_SHAPE)), "0"))
+            records.append(("boundary", role, str(len(L_SHAPE)), "0", str(len(L_SHAPE))))
             records.extend(("boundary-point", role, str(index), str(x), str(y))
                            for index, (x, y) in enumerate(L_SHAPE))
+            records.extend(("boundary-source", role, str(index), f"original-edge-{index}")
+                           for index in range(len(L_SHAPE)))
         return Receipt(original.nonce, original.request_id, original.status, original.message, tuple(records))
 
     def test_wire_to_normalized_board_retains_complete_contours(self):
         receipt = Receipt.from_dict(self.receipt().to_dict())
         result = from_receipt(receipt)
-        self.assertEqual(result["outline_boundary"], contour(L_SHAPE))
+        expected = {**contour(L_SHAPE), "source_digest": canonical_digest({
+            "edges": [f"original-edge-{index}" for index in range(len(L_SHAPE))],
+        })}
+        self.assertEqual(result["outline_boundary"], expected)
         self.assertFalse(board_boundaries(result)[0].contains_box(box(5, 5, 8, 8)))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.json"
+            write_json(path, receipt.to_dict())
+            context = _snapshot_context(path)
+            self.assertEqual(context["geometry"]["outline_boundary"], result["outline_boundary"])
+            self.assertNotIn("scene", context)
 
     def test_missing_reordered_duplicate_or_unversioned_contours_are_rejected(self):
         original = self.receipt()
@@ -139,10 +164,11 @@ class ContourProtocolTests(unittest.TestCase):
             [row for row in original.records if row[:3] != ("boundary-point", "outline", "2")],
             [row for row in original.records if row[0] != "boundary-model"],
             [row for row in original.records if row[:2] != ("boundary", "keepin")],
-            [*original.records, ("boundary", "outline", "6", "0")],
+            [*original.records, ("boundary", "outline", "6", "0", "6")],
             [*original.records, ("boundary-point", "keepout", "0", "1", "1")],
-            [("boundary", row[1], "3", "0") if row[0] == "boundary" else row for row in original.records],
+            [("boundary", row[1], "3", "0", "6") if row[0] == "boundary" else row for row in original.records],
             [("outline", "0", "0", "40", "30") if row[0] == "outline" else row for row in original.records],
+            [row for row in original.records if row[:3] != ("boundary-source", "outline", "2")],
         ]
         for records in invalid:
             with self.subTest(records=records[-2:]), self.assertRaises(ProtocolError):
@@ -207,9 +233,23 @@ class PolygonMissionTests(unittest.TestCase):
         del changed["outline_boundary"]
         with self.assertRaises(MissionError):
             plan_mission(changed, requirements(changed))
-        changed["outline_boundary"] = None
+
+    def test_native_source_changes_invalidate_even_identical_rounded_chords(self):
+        original = ContourProtocolTests().receipt()
+        board = from_receipt(original)
+        mission = plan_mission(board, requirements(board))
+        changed = Receipt(original.nonce, "3" * 32, original.status, original.message, tuple(
+            ("boundary-source", "outline", "0", "changed-native-arc-center")
+            if row[:3] == ("boundary-source", "outline", "0") else
+            ("snapshot", "3" * 32) if row[0] == "snapshot" else row for row in original.records
+        ))
+        current = from_receipt(changed)
+        self.assertEqual(current["outline_boundary"]["vertices"], board["outline_boundary"]["vertices"])
+        self.assertIn("immutable_facts_changed", codes(mission_status(current, mission)))
+        invalid = deepcopy(board)
+        invalid["outline_boundary"] = None
         with self.assertRaises(MissionError):
-            plan_mission(changed, requirements(changed))
+            plan_mission(invalid, requirements(invalid))
 
     def test_rotated_offset_footprint_and_independent_keepin_concavity(self):
         board = polygon_board(parts=[component("U1", bounds=("0", "0", "8", "2"), pins=[])])

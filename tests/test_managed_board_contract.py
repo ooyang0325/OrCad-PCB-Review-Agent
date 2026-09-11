@@ -169,6 +169,54 @@ class ManagedBoardContractTests(unittest.TestCase):
         self.assertIn('list("drc" design->drcState drcs)', read)
         self.assertIn("opaManagedRecordBudget(records)", read)
 
+    def test_boundary_reader_keeps_native_arcs_and_emits_explicit_complete_contours(self):
+        boundary = self.procedures["opaManagedBoundary"]
+        self.assertIn("center = opaPoint(segment->xy)", boundary)
+        self.assertNotIn("segment->radius", boundary)
+        self.assertIn("segment->isClockwise", boundary)
+        self.assertIn("!segment->isCircle", boundary)
+        self.assertIn("!object->voids", boundary)
+        self.assertIn("opaManagedBoundaryPoly(object)", boundary)
+        self.assertIn("opaManagedContourFromEdges(edges)", boundary)
+        self.assertIn("car(data) opaProps(object)", boundary)
+        read = self.procedures["opaManagedReadFrame"]
+        self.assertIn('list("boundary-model" "polygon-v1")', read)
+        self.assertIn('opaManagedContourRecords("outline"', read)
+        self.assertIn('opaManagedContourRecords("keepin"', read)
+        self.assertNotIn("opaManagedInside(keepin outline)", read)
+        policy = self.procedures["opaManagedPlacementPolicy"]
+        self.assertIn("opaManagedContourContains(bounds outline)", policy)
+        self.assertIn("opaManagedContourContains(bounds keepin)", policy)
+        self.assertNotIn("opaManagedInside(bounds outline)", policy)
+
+    def test_arc_sampling_is_bounded_and_does_not_treat_chords_as_exact(self):
+        arc = self.procedures["opaManagedArcPoints"]
+        self.assertIn("theta = abs(atan2(cross dot))", arc)
+        self.assertNotIn("acos(", arc)
+        self.assertIn("divisions <= 512", arc)
+        self.assertIn("theta / 1.5707963267948966", arc)
+        self.assertIn("radius * theta * theta / (8.0 * divisions * divisions) <= 8.0", arc)
+        self.assertIn("list(round(x) round(y))", arc)
+        contour = self.procedures["opaManagedContourFromEdges"]
+        self.assertIn("margin = 12", contour)
+        self.assertIn("length(vertices) + length(points) <= 512", contour)
+        contains = self.procedures["opaManagedContourContains"]
+        self.assertIn("caar(box) - margin", contains)
+        self.assertIn("caadr(box) + margin", contains)
+        self.assertIn("opaManagedContourCutsBox(", contains)
+
+    def test_native_nonrectangular_tests_are_read_only_and_check_more_than_corners(self):
+        for filename in ("nonrectangular_readonly.il", "outline_readonly.il"):
+            source = (ROOT / "tests" / "native" / filename).read_text(encoding="ascii")
+            procedures = _procedures(source)
+            self.assertEqual(len(procedures), 1)
+            self.assertIn("opaBoardGuard()", source)
+            self.assertNotRegex(_code_only(source),
+                                r"\baxl(?:DBCreate\w*|DBTransaction\w*|TransformObject|DRCUpdate|SaveDesign|OpenDesign)\(")
+        source = (ROOT / "tests" / "native" / "nonrectangular_readonly.il").read_text(encoding="ascii")
+        self.assertIn("notch-between-inside-corners", source)
+        self.assertIn("Signed-zero semicircle", source)
+
     def test_inventory_and_definition_geometry_are_not_fixture_hardcoded(self):
         self.assertNotRegex(self.source, r'OPA_FIXTURE_|"R[123]"|TEST_NET|TEST_RETURN')
         code = self.reachable("opaManagedReadFrame")
