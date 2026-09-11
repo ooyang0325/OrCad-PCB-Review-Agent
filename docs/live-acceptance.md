@@ -1,5 +1,27 @@
 # Live acceptance status
 
+## Grouped-constraint acceptance
+
+The reported `board-v5fj68dc` session initially contained three generic
+quick-placement room groups and two net groups assigning SIGNAL/POWER Csets.
+The operator confirmed changing the groups while inspection was underway.
+Those edits were not undone. Cadence refused a simultaneous second instance;
+after the operator saved edits separately and closed the original window, a
+separately approved read-only copy was used for validation.
+
+Repeated native reads now preserve the saved copy's DB/POWER groups, fourteen
+net memberships, seven named Csets across all four layers, and eighty-four
+component/function ROOM assignments. Empty conductor-named wire-profile
+metadata and positive PLANE layer descriptions are preserved. No room drawings
+remained in that saved version. Native data-only tests exercise room-label
+matching, conflicting tags, and rejection of footprints outside a matched room.
+
+The next full-handshake prerequisite is missing embedded package definitions:
+46 logical components are unplaced and only the AB00 flash definition is
+embedded; sixteen package definitions are required. No package was loaded and
+no placement, constraint edit, save, or source overwrite was performed.
+See [grouped constraints and library prerequisites](grouped-constraints.md).
+
 ## Nonrectangular outline acceptance
 
 Version 0.6.0 adds explicit simple outline/keepin contours to native snapshots

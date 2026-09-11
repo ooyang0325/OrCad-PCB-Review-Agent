@@ -17,6 +17,7 @@ These are development gates, not dates or GitHub milestones.
 | M10 | Bundled PCB expertise | Original source-grounded knowledge ships in packages and works through all agent/reference flows without books or an index | 36 cards and no-book retrieval implemented; native capability limits unchanged |
 | M11 | Executable zero-placed missions | Concrete all-component targets, initial placement, fresh-readback progression, routing screening and separate revision approval | Managed readback/PNG and six native reader cases pass; initial placement/mutation/save acceptance pending human approval |
 | M12 | Nonrectangular outlines | Native line/arc contours and whole-footprint concave containment through mission/proposal/readback | Native contour checks and read-only howto outline extraction pass; unrelated full-board restrictions remain |
+| M13 | Preserved group/room constraints | Flat room/net groups, complete named Csets, immutable policy identity and explicit room matching | Implemented; native grouped-Cset reads pass on a separate saved copy; missing package definitions still block full attachment |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.

@@ -86,6 +86,10 @@ HPWL screening is not escape, reference-plane or routed-length proof.
 For polygon outlines, verify complete contour and approximation-margin evidence;
 bounding-box fit and four inside corners are insufficient for concave notches.
 Both the actual outline and the keepin must contain each full footprint.
+For grouped design policy, verify unchanged memberships, named Csets and ROOM
+assignments. Do not confuse net-group names, staging-box captions and spatial
+room constraints. Require resolution of ambiguous room mappings rather than
+approving a plan that silently discards source constraints.
 No approval token, checksum, DRC count, or agent opinion substitutes for
 explicit user approval and the existing native checks.
 

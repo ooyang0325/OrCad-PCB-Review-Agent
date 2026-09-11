@@ -21,14 +21,20 @@ top keepouts, straight supported package linework and simple rectangular, square
 or circular SMT pads. A PRIMARY stackup may have 2-32 positive conductor
 layers. Required placement DRC must already be enabled and current.
 
+[Flat groups, placement rooms and named constraint sets](grouped-constraints.md)
+are preserved as native design policy. Positive plane layers are included in
+the complete constraint readback. Room labels and component/function ROOM tags
+are matched explicitly; unmatched tags are not mapped to staging boxes by guesswork.
+
 Logical function instances are supported only with complete checked
 definition and forward/reverse pin associations. Cadence-owned attachments are
 preserved read-only as complete exported bytes plus native metadata, never
 deleted from the board; stored and expanded sizes are bounded separately.
 
-Missing/unloaded footprints, text, unmapped logical functions, mechanical-only
+Missing/unloaded footprints, package/unattached text, unmapped logical functions, mechanical-only
 symbols, through-hole/complex pads, unsupported package shapes, routed copper,
-groups/regions, oversized/unreadable attachments and nondefault constraint topology are rejected.
+nested/component groups, regions, oversized/unreadable attachments, electrical
+Csets and class/region overrides are rejected.
 Do not remove design information or silently substitute a simpler board to
 force acceptance. These are implementation limits, not evidence that Cadence
 cannot support those designs. Live enumeration and PNG inspection have passed on the original fixture.

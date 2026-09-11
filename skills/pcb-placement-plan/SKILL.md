@@ -63,6 +63,12 @@ approximation margins. Bounding rectangles and four inside corners are not
 whole-footprint containment in a concavity. Never simplify the user's boundary
 or delete unrelated unsupported objects to force a placement.
 
+Preserve the native design_policy, including room/net groups and assigned
+constraint sets. Do not replace named Csets with DEFAULT or infer electrical
+roles from group names. Unmatched ROOM tags are metadata, not invented keepins;
+ambiguous matches require resolution. Missing footprints require explicit
+operator preparation, never implicit library loading.
+
 After an inspection timeout, use `pcb_inspection_status` and reconcile only its
 exact read-only request ID. Never retry a placement to recover an image.
 

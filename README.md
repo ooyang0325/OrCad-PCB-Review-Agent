@@ -65,6 +65,11 @@ approximation. Both native gates and planning reject footprint crossings;
 the outline's bounding rectangle is not treated as usable board area.
 Other footprint, routing and native-approval limitations still apply.
 
+[Group-aware constraints](docs/grouped-constraints.md) preserve flat room/net
+groups, named physical/spacing/same-net sets, and ROOM assignments instead of
+requiring users to delete them. Missing package definitions remain an explicit
+library-preparation blocker; group support does not silently import footprints.
+
 The supplied `doc` manuals and `pcb_design_book` references remain local-only.
 Do not commit them, vendor libraries, or native working board files.
 The user-supplied `design` directory also remains local-only.

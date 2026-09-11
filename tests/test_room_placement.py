@@ -2,18 +2,20 @@
 
 from copy import deepcopy
 from decimal import Decimal
+import json
 from pathlib import Path
 import tempfile
 import unittest
 
 from orcad_placement_agent.board import from_receipt
-from orcad_placement_agent.agent_tools import display_payload
+from orcad_placement_agent.agent_tools import AgentActions, display_payload
 from orcad_placement_agent.missions import MissionError, mission_status, next_candidate, plan_mission
 from orcad_placement_agent.protocol import ProtocolError, Receipt
 from orcad_placement_agent.proposals import propose
 from orcad_placement_agent.room_geometry import resolve_rooms
 from tests.test_board import managed_snapshot
 from tests.test_missions import component, snapshot, requirements, fake_apply, fresh, codes, world_box
+from tests.test_mission_actions import FakeManagedEditor
 
 
 def policy(*, label="UC", room_label="UC", bounds=("8", "1", "15", "11")):
@@ -163,6 +165,40 @@ class RoomWireAndProposalTests(unittest.TestCase):
         records = tuple(row for row in receipt.records if row[0] != "policy-part")
         with self.assertRaises(ProtocolError):
             from_receipt(Receipt(receipt.nonce, receipt.request_id, receipt.status, "", records))
+
+    def test_controller_advances_grouped_mission_only_after_exact_fake_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session_root = root / "board-grouped"
+            session_root.mkdir()
+            editor = FakeManagedEditor(session_root)
+            original_records = editor.records
+            policy_tags = {"policy-model", "policy", "policy-part", "room", "room-assignment",
+                           "net-group", "net-group-member", "constraint-set", "policy-net"}
+            policy_records = tuple(row for row in self.receipt().records if row[0] in policy_tags)
+            editor.records = lambda: (*original_records(), *policy_records)
+            actions = AgentActions(root, session_factory=lambda _root: editor, capture=editor.capture)
+
+            def dispatch(action, **parameters):
+                return actions.dispatch({"action": action, "session": "board-grouped", **parameters})
+
+            result = dispatch("mission-plan", requirements_json=json.dumps({
+                "expected_refdes": ["U1", "U2", "R1"], "grid_mm": "1", "clearance_mm": "0.5",
+            }))
+            self.assertEqual(result["status"], "mission_planned")
+            mission = result["mission"]
+            digest = result["plan"]["baseline"]["design_policy"]["digest"]
+            for count in range(3):
+                prepared = dispatch("mission-next", mission=mission)
+                self.assertEqual(prepared["status"], "prepared")
+                self.assertEqual(prepared["progress"]["placement"]["verified_placed_count"], count)
+                proposal = prepared["proposal_sha256"]
+                outcome = dispatch("apply", proposal=proposal, confirmation=f"APPLY {proposal}")
+                self.assertEqual(outcome["status"], "applied")
+            status = dispatch("mission-status", mission=mission)
+            self.assertTrue(status["progress"]["placement"]["complete"])
+            self.assertEqual(status["progress"]["routing"]["native_policy"]["digest"], digest)
+            self.assertEqual(status["progress"]["persistence"]["status"], "unverified")
 
 
 if __name__ == "__main__":

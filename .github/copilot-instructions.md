@@ -49,6 +49,11 @@ dependency. Do not replace Python 2.7 or modify global Cadence settings.
   supported boundary. Missing libraries/imports are blockers, not permission to
   load or create them implicitly. Separate Save approval never implies reopen.
   Fake-editor tests do not establish native acceptance.
+- Preserve native room/net groups, complete named Cset values and their
+  assignments in the immutable design policy; never ungroup or substitute
+  DEFAULT to bypass an attach rejection. Match ROOM tags explicitly, report
+  ambiguous/unmapped spatial data, and keep native room DRC enabled. Missing
+  embedded packages require explicit operator preparation, never implicit loading.
 - Elicitation support does not prove a human answered. Refuse app execution
   outside interactive mode. Portable MCP writes are disabled by default;
   only an operator may opt in with genuine interactive input and no auto-answer

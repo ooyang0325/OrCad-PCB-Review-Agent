@@ -102,6 +102,12 @@ complete native outline/keepin contours and their error margins. A bounding
 rectangle or four inside footprint corners cannot establish containment across
 a concave notch. Do not remove unsupported board features to force acceptance.
 
+Read `docs\grouped-constraints.md` when native design_policy is present.
+Preserve room/net-group membership and named Cset assignments. Matching ROOM
+tags and drawing labels add conservative placement regions; unresolved labels
+are not guesses at spatial boundaries or electrical roles. Native DRC remains
+separate. Never delete groups or load missing package definitions implicitly.
+
 When an exact candidate is sufficiently supported and within the selected model's
 scope, use `pcb_prepare_placement`. Inspect its returned current PNG and cite
 the proposal identifier, target pose and visual observation in your handoff.
