@@ -39,12 +39,21 @@ def display_payload(value: object) -> object:
         return {"opaque_scene_omitted_from_display": True,
                 "instruction": "Use the persisted native receipt for complete scene data."}
     if isinstance(value, dict):
-        return {key: display_payload(item) for key, item in value.items()}
+        return {key: (
+            [_display_record(row) for row in item]
+            if key == "records" and isinstance(item, (list, tuple))
+            else display_payload(item)
+        ) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        if len(value) == 3 and value[0] == "scene-part":
-            return ["scene-part", value[1], "Opaque scene omitted; use the persisted receipt."]
         return [display_payload(item) for item in value]
     return json_wire(value)
+
+
+def _display_record(row: object) -> object:
+    if (isinstance(row, (list, tuple)) and len(row) == 3 and isinstance(row[0], str)
+            and row[0] in {"scene-part", "policy-part"}):
+        return [row[0], row[1], "Opaque native data omitted; use the persisted receipt."]
+    return display_payload(row)
 
 
 def capture_visual(session: Session) -> dict[str, object]:

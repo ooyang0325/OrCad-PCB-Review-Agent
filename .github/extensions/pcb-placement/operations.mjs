@@ -30,9 +30,12 @@ function requireFields(args, fields) {
 
 export function createPlacementTools({ run, requestInput, canPrompt, imageResult }) {
     function display(value) {
-        return JSON.stringify(value, (_key, item) => {
-            if (Array.isArray(item) && item.length === 3 && item[0] === "scene-part") {
-                return ["scene-part", item[1], "Opaque scene omitted; use the persisted receipt."];
+        return JSON.stringify(value, (key, item) => {
+            if (key === "records" && Array.isArray(item)) {
+                return item.map(row => Array.isArray(row) && row.length === 3 &&
+                    ["scene-part", "policy-part"].includes(row[0])
+                    ? [row[0], row[1], "Opaque native data omitted; use the persisted receipt."]
+                    : row);
             }
             if (typeof item === "string" &&
                 (item.startsWith("OPA-FIXTURE-1;") || item.startsWith("OPA-BOARD-1;"))) {

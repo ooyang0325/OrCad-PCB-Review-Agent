@@ -118,4 +118,16 @@ def from_receipt(receipt: Receipt) -> dict[str, object]:
             result[role + "_boundary"] = boundary.to_dict()
     elif contours or any(vertices.values()) or any(sources.values()):
         raise ProtocolError("Contour data lacks an explicit native boundary model.")
+    policy_tags = {"policy-model", "policy", "policy-part", "room", "room-assignment",
+                   "net-group", "net-group-member", "constraint-set", "policy-net"}
+    if any(row[0] in policy_tags for row in receipt.records):
+        from .design_policy import decode_policy
+
+        policy = decode_policy(receipt, set(components))
+        if policy is None:
+            raise ProtocolError("Native policy records could not be reconciled.")
+        used_nets = {pin["net"] for pin in pins.values() if pin["net"]}
+        if not used_nets <= set(policy["nets"]):
+            raise ProtocolError("A physical/logical pin references a net missing from the protected policy inventory.")
+        result["design_policy"] = policy
     return result

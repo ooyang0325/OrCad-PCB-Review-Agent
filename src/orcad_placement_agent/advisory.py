@@ -55,6 +55,8 @@ def _snapshot_context(path: Path) -> dict[str, object]:
         result["geometry"] = {key: board[key] for key in (
             "outline", "keepin", "keepouts", "layers", "outline_boundary", "keepin_boundary",
         ) if key in board}
+        if "design_policy" in board:
+            result["design_policy"] = board["design_policy"]
         result["limitations"].append(
             "Outline/keepin extents are not usable area for nonrectangular boards; use complete contours and their error margins."
         )

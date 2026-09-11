@@ -94,6 +94,14 @@ def propose(
                             target_x, target_y, decimal_text(target_angle))
         if not all(boundary.contains_box(box) for boundary in board_boundaries(board)):
             raise ProtocolError("Target footprint crosses the native outline/keepin contour or approximation margin.")
+    if board is not None and "design_policy" in board:
+        from .boundaries import footprint_box
+        from .room_geometry import check_target_room
+
+        target = next(part for part in board["components"] if part["refdes"] == refdes)
+        box = footprint_box(tuple(number(value) for value in target["bounds"]),
+                            target_x, target_y, decimal_text(target_angle))
+        check_target_room(board, refdes, box)
     proposal: dict[str, object] = {
         "schema_version": 1,
         "nonce": session.nonce,

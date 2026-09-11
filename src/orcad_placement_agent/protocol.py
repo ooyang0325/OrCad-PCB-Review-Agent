@@ -176,7 +176,10 @@ class Receipt:
                    "scene": 2, "snapshot": 2, "saved": 2, "scene-part": 3,
                    "model": 2, "outline": 5, "keepin": 5, "keepout": 5,
                    "bounds": 6, "pin": 6, "layer": 2, "boundary-model": 2,
-                   "boundary": 5, "boundary-point": 5, "boundary-source": 4}
+                   "boundary": 5, "boundary-point": 5, "boundary-source": 4,
+                   "policy-model": 2, "policy": 8, "policy-part": 3, "room": 7,
+                   "room-assignment": 4, "net-group": 5, "net-group-member": 3,
+                   "constraint-set": 3, "policy-net": 2}
         for record in records:
             if record[0] not in allowed or len(record) != allowed[record[0]]:
                 raise ProtocolError("Unsupported receipt record.")
