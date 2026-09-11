@@ -41,7 +41,7 @@ can replace the explicit interpreter path. Existing developers may use the
 repository's `.venv\Scripts\python.exe`.
 
 The installer creates an owned, versioned environment at
-`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.5.0` and generates client
+`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.5.1` and generates client
 snippets inside its `client-configs` directory. It does not change PATH,
 Python 2.7, execution policy, Cadence settings, existing client configuration,
 or any board. Re-running is idempotent for the same installed version; it

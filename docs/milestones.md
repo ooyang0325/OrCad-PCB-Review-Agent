@@ -15,7 +15,7 @@ These are development gates, not dates or GitHub milestones.
 | M8 | Portable client distribution | Standard MCP, packaged native assets, safe setup/config generation, and Codex/Claude/Copilot plugin-marketplace manifests | Complete packaging; client prerequisites and repository access required |
 | M9 | Placement mission coordinator | Fourth agent/portable workflow delegates intake, floorplanning, batches and routing-aware review with explicit inventory/capability gates | Coordinator implemented; now backed by the M11 mission engine |
 | M10 | Bundled PCB expertise | Original source-grounded knowledge ships in packages and works through all agent/reference flows without books or an index | 36 cards and no-book retrieval implemented; native capability limits unchanged |
-| M11 | Executable zero-placed missions | Concrete all-component targets, initial placement, fresh-readback progression, routing screening and separate revision approval | Software and bounded managed-board backend implemented; live native acceptance pending |
+| M11 | Executable zero-placed missions | Concrete all-component targets, initial placement, fresh-readback progression, routing screening and separate revision approval | Managed readback/PNG and six native reader cases pass; initial placement/mutation/save acceptance pending human approval |
 
 The environment doctor is an M0 prerequisite, not completion of M0.
 Read-only live access must be established before board-editing work begins.

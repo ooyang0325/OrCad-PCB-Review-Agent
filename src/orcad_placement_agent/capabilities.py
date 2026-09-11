@@ -34,7 +34,8 @@ def backend_capabilities() -> dict[str, object]:
         "initial_placement_requirements": (
             "Explicit managed-board-v1 staging; nonempty imported logical inventory and embedded simple "
             "top-side SMT footprints; rectangular boundaries; millimeters/4/10000; no routing, text, "
-            "logical gate instances, groups, advanced pads, or nondefault constraint topology. "
+            "unmapped logical functions, groups, advanced pads, or nondefault constraint topology. "
+            "Native attachments must be readable within the bounded exported-byte model. "
             "Missing definitions and raw empty-design import remain explicit intake blockers. "
             "The legacy fixture model does not initially place components."
         ),
