@@ -104,6 +104,8 @@ def from_receipt(receipt: Receipt) -> dict[str, object]:
         "keepouts": [_rectangle(row[1:]) for row in receipt.records if row[0] == "keepout"],
         "layers": layers, "components": [components[name] for name in sorted(components)],
     }
+    if receipt.unverified_3d_attachments:
+        result["unverified_3d_attachments"] = receipt.unverified_3d_attachments
     if any(row[0] == "boundary-model" for row in receipt.records):
         if receipt.one("boundary-model") != ("boundary-model", "polygon-v1") or set(contours) != set(vertices):
             raise ProtocolError("Native boundary model is unsupported or incomplete.")

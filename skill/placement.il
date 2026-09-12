@@ -32,7 +32,11 @@ procedure(opaStable(value)
 )
 
 procedure(opaSortedData(values)
-    sort(copy(values) lambda((a b) alphalessp(opaStable(a) opaStable(b))))
+    let((keyed)
+        keyed = foreach(mapcar value values list(opaStable(value) value))
+        keyed = sort(keyed lambda((a b) alphalessp(car(a) car(b))))
+        foreach(mapcar entry keyed cadr(entry))
+    )
 )
 
 procedure(opaPairs(values)
@@ -465,15 +469,20 @@ procedure(opaConstraintData()
     )
 )
 
-procedure(opaCollectAtoms(value atoms)
+procedure(opaCollectAtoms(value atoms @optional seen)
+    unless(seen
+        seen = makeTable('opaCollectedAtoms nil)
+        foreach(atom atoms seen[atom] = t))
     if(listp(value) then
-        foreach(item value atoms = opaCollectAtoms(item atoms))
+        foreach(item value atoms = opaCollectAtoms(item atoms seen))
     else
         opaRequire(stringp(value) || symbolp(value) || numberp(value)
             "Unsupported native scene value.")
         value = opaStable(value)
         opaField(value)
-        unless(member(value atoms) atoms = cons(value atoms))
+        unless(seen[value]
+            seen[value] = t
+            atoms = cons(value atoms))
     )
     atoms
 )

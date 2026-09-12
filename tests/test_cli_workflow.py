@@ -1,6 +1,7 @@
 import contextlib
 import io
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -69,6 +70,39 @@ class WorkflowCLITests(unittest.TestCase):
         code = self.run_cli(["reconcile", "--session", r"C:\isolated"])
         self.assertEqual(code, 3)
         self.session.exchange.assert_not_called()
+
+    def test_setup_attach_uses_separate_library_handshake(self):
+        self.session.bind.return_value = self.session.exchange.return_value
+        with patch("orcad_placement_agent.cli.WindowsAPI") as api:
+            code = self.run_cli(["attach", "--session", r"C:\isolated", "--hwnd", "123", "--library-setup"])
+        self.assertEqual(code, 0)
+        self.session.bind.assert_called_once_with(api.return_value.inspect.return_value, library_setup=True)
+        self.assertIn("not yet established", self.output.getvalue())
+
+    def test_noninteractive_library_cli_cannot_request_or_supply_approval(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("orcad_placement_agent.cli.AgentActions") as actions,
+            patch("orcad_placement_agent.cli.sys.stdin.isatty", return_value=False),
+            patch("builtins.input") as prompt,
+        ):
+            code = self.run_cli(["libraries", "load", "--session", directory, "--proposal", "a" * 64])
+        self.assertEqual(code, 2)
+        actions.return_value.dispatch.assert_not_called()
+        prompt.assert_not_called()
+        self.assertIn("interactive terminal", self.error.getvalue())
+
+    def test_library_post_image_failure_is_not_a_success_exit(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("orcad_placement_agent.cli.AgentActions") as actions,
+        ):
+            actions.return_value.dispatch.return_value = {
+                "status": "libraries_loaded", "visual_error": "Post-image unavailable",
+            }
+            code = self.run_cli(["libraries", "status", "--session", directory, "--proposal", "a" * 64])
+        self.assertEqual(code, 2)
+        self.assertIn("libraries_loaded", self.output.getvalue())
 
 
 if __name__ == "__main__":

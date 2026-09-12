@@ -79,7 +79,7 @@ class ManagedBoardTests(unittest.TestCase):
             root = Path(directory)
             skill = root / "skill"
             skill.mkdir()
-            for name in ("protocol.il", "placement.il", "adapter.il", "managed_board.il"):
+            for name in ("protocol.il", "placement.il", "adapter.il", "managed_board.il", "library_setup.il"):
                 (skill / name).write_text("; original test placeholder", encoding="ascii")
             source = root / "source.brd"
             source.write_bytes(b"Original synthetic test board bytes")

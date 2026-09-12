@@ -49,7 +49,7 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
     }
 
     async function render(value) {
-        let resultType = ["error", "indeterminate", "blocked", "inspection_pending"].includes(value.status) ||
+        let resultType = ["error", "indeterminate", "blocked", "inspection_pending", "library_partial"].includes(value.status) ||
             value.visual_error ? "failure" :
             ["rejected", "rolled_back"].includes(value.status) ? "rejected" : "success";
         const result = { textResultForLlm: display(value), resultType };
@@ -60,7 +60,7 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
                 result.resultType = "failure";
                 result.textResultForLlm = display({
                     ...value, image_error: error.message,
-                    warning: "The native outcome above still stands. Do not retry a placement because its image is unavailable.",
+                    warning: "The native outcome above still stands. Do not repeat LOAD, Apply or Save because its image is unavailable.",
                 });
             }
         }
@@ -173,6 +173,7 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
                 }
                 const description = await run({ action: describeAction, ...args });
                 if (description.status !== "prepared") return await render(description);
+                await imageResult(description.visual);
                 const expected = `${verb} ${args.proposal}`;
                 const answer = await requestInput(
                     `${description.summary}\nBoard copy: ${description.working_board}\n` +
@@ -196,7 +197,7 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
                     resultType: "failure",
                     textResultForLlm: JSON.stringify({
                         status: "error", error: error.message,
-                        warning: "Do not infer rollback or retry. Query this proposal's placement/save status if approval was already submitted.",
+                        warning: "Do not infer rollback or retry. Query this proposal's library/placement/save status if approval was already submitted.",
                     }),
                 };
             }
@@ -216,5 +217,18 @@ export function createPlacementTools({ run, requestInput, canPrompt, imageResult
     tools.push(approvedTool("pcb_save_revision",
         "Request separate exact human SAVE approval and save one new revision. Never overwrite the source; no automatic reopen.",
         "SAVE", "describe-save", "apply-save"));
+    tools.push(tool("pcb_inspect_libraries",
+        "Inspect the bound library-setup inventory and actual PNG before package definitions are embedded. This is not full placement readiness.",
+        schema({ session: sessionProperty }), "inspect-libraries", ["session"]));
+    tools.push(tool("pcb_prepare_library_load",
+        "Prepare exact missing package definitions from verified staged files and fresh PNG evidence. No libraries are loaded or approved.",
+        schema({ session: sessionProperty }), "prepare-libraries", ["session"]));
+    tools.push(tool("pcb_library_load_status",
+        "Read or reconcile the exact recorded library-load outcome without replaying it. Full board inspection is still required afterward.",
+        schema({ session: sessionProperty, proposal: proposalProperty }),
+        "library-status", ["session", "proposal"]));
+    tools.push(approvedTool("pcb_load_libraries",
+        "Request genuine human LOAD approval, then load exactly the reviewed staged package definitions. No placement, Save or global settings changes; never auto-approve or replay.",
+        "LOAD", "describe-libraries", "load-libraries"));
     return tools;
 }

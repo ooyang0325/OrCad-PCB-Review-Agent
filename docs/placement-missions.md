@@ -3,8 +3,11 @@
 The mission engine produces a complete set of concrete target poses and advances
 one component at a time using fresh native readback. It is not merely an agent
 handoff prompt. Initial placement still requires a logical design: the source
-board must contain the intended components, pin/net assignments and usable
-embedded footprint definitions. An empty database is not a circuit specification.
+board must contain the intended components and pin/net assignments. Usable
+embedded footprint definitions must be present before full placement inspection,
+either already embedded or supplied by the separate
+[approved library-setup workflow](library-loading.md). An empty database is not
+a circuit specification.
 
 The experimental `managed-board-v1` adapter is a separate, explicitly selected
 model. The original fixture model remains the default. Unsupported geometry,
@@ -28,13 +31,29 @@ are matched explicitly; unmatched tags are not mapped to staging boxes by guessw
 
 Logical function instances are supported only with complete checked
 definition and forward/reverse pin associations. Cadence-owned attachments are
-preserved read-only as complete exported bytes plus native metadata, never
-deleted from the board; stored and expanded sizes are bounded separately.
+preserved read-only by default through native metadata and streaming SHA-256 fingerprints
+of every exported byte, explicitly marked `sha256-expanded-v1`; attachments
+are never truncated or deleted from the board. Stored and expanded sizes each
+have an 8 MiB per-attachment limit and a separate 16 MiB aggregate limit.
+See [attachment preservation and inspection latency](library-loading.md#attachment-preservation-and-inspection-latency)
+for the unchanged wire bound, shared round-trip deadline and validation limits.
 
-Missing/unloaded footprints, package/unattached text, unmapped logical functions, mechanical-only
+An operator may separately choose the optional
+[`--allow-unverified-3d` staging policy](design-staging.md#optional-explicit-unverified-3d-policy)
+for a full-folder managed session; strict verification remains the default.
+Only exact nonempty `3D:`/`ACIS` attachment content is waived, not metadata
+comparisons or supported non-3D SHA-256 protection. Full-placement and setup
+snapshots report the exact unverified names, and LOAD/Apply/SAVE descriptions
+retain the warning. Agents cannot toggle this policy, and no 3D/mechanical
+clearance verification is implied.
+
+Full placement inspection rejects missing/unloaded footprints. A separate
+all-unplaced library-setup binding can prepare exact missing definitions, but
+does not waive the full model's geometry checks.
+Package/unattached text, unmapped logical functions, mechanical-only
 symbols, through-hole/complex pads, unsupported package shapes, routed copper,
-nested/component groups, regions, oversized/unreadable attachments, electrical
-Csets and class/region overrides are rejected.
+nested/component groups, regions, oversized/unreadable attachments outside the
+explicit 3D-content exception, electrical Csets and class/region overrides are rejected.
 Do not remove design information or silently substitute a simpler board to
 force acceptance. These are implementation limits, not evidence that Cadence
 cannot support those designs. Live enumeration and PNG inspection have passed on the original fixture.
@@ -59,6 +78,18 @@ an isolated `design-data` directory, including libraries and supporting files.
 Use `--design-root` when project libraries are in sibling folders, or
 `--board-only` for the legacy single-file behavior. Copied library directories
 are reported, not automatically configured or loaded into Cadence.
+
+If required packages are missing and all logical components are unplaced, the
+operator can use `attach --library-setup` on the exact managed session.
+`pcb_inspect_libraries` and `pcb_prepare_library_load` provide actual PNGs and
+the exact missing packages/verified staged PSM/PAD/FSM/SSM cache for review.
+The executor requests separate exact human LOAD via `pcb_load_libraries`;
+`pcb_library_load_status` reconciles its outcome without replay. LOAD is
+non-atomic and in memory only, with partial/uncertain outcomes possible. It
+does not import logical parts, refresh existing definitions, place components,
+save, guarantee persistence or change global settings.
+Require normal `pcb_inspect` afterward before starting a mission; loaded complex
+geometry can still be unsupported. Native LOAD acceptance is pending.
 
 The native snapshot supplies logical placed/unplaced inventory, local footprint
 bounds and pin coordinates, nets, outline, keepin, keepouts and conductor layers.
@@ -121,8 +152,8 @@ first-feasible search, not a global-optimum claim.
 
 ## Closed loop through MCP or app tools
 
-1. Call `pcb_plan_placement` with the exact managed session and
-   `requirements_json`. Examine its actual PNG and complete target plan.
+1. After full placement inspection succeeds, call `pcb_plan_placement` with the
+   exact managed session and `requirements_json`. Examine its actual PNG and complete target plan.
    Resolve blockers before any execution. The plan is stored locally and
    cannot be silently rewritten.
 2. Retain the top-level **`mission`** handle from that result. This is a

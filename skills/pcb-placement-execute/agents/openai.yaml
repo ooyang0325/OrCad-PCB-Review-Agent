@@ -1,5 +1,5 @@
 interface:
   display_name: "PCB placement executor"
-  short_description: "Execute a reviewed pose only after human approval"
+  short_description: "Execute exact placement or library LOAD after human approval"
 policy:
   allow_implicit_invocation: false

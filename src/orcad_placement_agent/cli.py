@@ -54,6 +54,8 @@ def main(argv: list[str] | None = None) -> int:
     stage.add_argument("--skill-dir", type=Path, help="Explicit trusted source override; packaged assets are the default.")
     stage.add_argument("--model", choices=("fixture", "managed-board-v1"), default="fixture",
                        help="Explicitly select the native model; source boards are always copied.")
+    stage.add_argument("--allow-unverified-3d", action="store_true",
+                       help="Explicitly waive content verification only for embedded 3D:.../ACIS attachments; metadata remains checked. Does not remove models.")
     copy_scope = stage.add_mutually_exclusive_group()
     copy_scope.add_argument("--design-root", type=Path,
                             help="Project tree to copy recursively; default is the selected board's containing folder.")
@@ -63,6 +65,15 @@ def main(argv: list[str] | None = None) -> int:
     attach = commands.add_parser("attach", help="Bind the staged copy to an explicit editor through a read-only handshake.")
     attach.add_argument("--session", type=Path, required=True)
     attach.add_argument("--hwnd", type=lambda value: int(value, 0), required=True)
+    attach.add_argument("--library-setup", action="store_true",
+                        help="Bind for explicit library preparation before full package geometry is available; not placement readiness.")
+    libraries = commands.add_parser("libraries", help="Inspect and prepare staged library loading; native LOAD needs exact approval.")
+    library_commands = libraries.add_subparsers(dest="library_command", required=True)
+    for operation in ("inspect", "prepare", "load", "status"):
+        sub = library_commands.add_parser(operation)
+        sub.add_argument("--session", type=Path, required=True)
+        if operation in ("load", "status"):
+            sub.add_argument("--proposal", required=True)
     mission = commands.add_parser("mission", help="Plan, inspect, and prepare a complete managed-board placement mission.")
     mission_commands = mission.add_subparsers(dest="mission_command", required=True)
     for operation in ("plan", "status", "next"):
@@ -163,6 +174,26 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "knowledge":
             return _knowledge_command(args)
+        if args.command == "libraries":
+            selected = args.session.expanduser().resolve(strict=True)
+            actions = AgentActions(selected.parent)
+            action = {"inspect": "inspect-libraries", "prepare": "prepare-libraries",
+                      "status": "library-status", "load": "load-libraries"}[args.library_command]
+            request = {"action": action, "session": selected.name}
+            if args.library_command in {"load", "status"}:
+                request["proposal"] = args.proposal
+            if args.library_command == "load":
+                if not sys.stdin.isatty():
+                    raise SessionError("Library loading requires genuine interactive terminal input; no LOAD was sent.")
+                description = actions.dispatch({**request, "action": "describe-libraries"})
+                print(description["summary"])
+                print(f"Review image: {description['visual']['image_path']}")
+                print(description["warning"])
+                request["confirmation"] = input(f"Type LOAD {args.proposal} to authorize only these definitions: ")
+            result = actions.dispatch(request)
+            print(json.dumps(display_payload(result), indent=2, ensure_ascii=True))
+            return 0 if (result["status"] in {"prepared", "library_inventory", "libraries_loaded", "not_dispatched"}
+                         and not result.get("visual_error")) else 2
         if args.command == "mission":
             selected = args.session.expanduser().resolve(strict=True)
             request = {"action": f"mission-{args.mission_command}", "session": selected.name}
@@ -192,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.source, runtime, args.skill_dir if args.skill_dir is not None else asset_directory("skill"),
                 model=args.model,
                 design_root=args.design_root, board_only=args.board_only,
+                allow_unverified_3d=args.allow_unverified_3d,
             )
             bootstrap = json.dumps(str(root / "bootstrap.il"))
             metadata = json.loads((root / "session.json").read_text(encoding="utf-8"))
@@ -204,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
                     "load_command": f"skill load({bootstrap})", "model": args.model,
                     "copy_mode": "board-only" if design is None else "design-folder",
                     "design_copy": design, "native_board_operations": False,
+                    "allow_unverified_3d": args.allow_unverified_3d,
                 }, indent=2, ensure_ascii=True))
                 return 0
             print(f"Session: {root}")
@@ -220,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
                 print("Supporting files copied only; package definitions are not loaded by staging.")
             else:
                 print("Board-only mode: supporting design files were not copied.")
+            if args.allow_unverified_3d:
+                print("Warning: embedded 3D model contents will be unverified; only their metadata is preserved in comparisons. No models were removed.")
             print(f"Load the trusted adapter: skill load({bootstrap})")
             print("Then run editors and attach with the explicit HWND and --session path.")
             return 0
@@ -267,7 +302,9 @@ def main(argv: list[str] | None = None) -> int:
 def _session_command(args: argparse.Namespace) -> int:
     session = Session(args.session)
     if args.command == "attach":
-        receipt = session.bind(WindowsAPI().inspect(args.hwnd))
+        receipt = session.bind(WindowsAPI().inspect(args.hwnd), library_setup=args.library_setup)
+        if args.library_setup:
+            print("Attached for library preparation only. Full board placement readiness is not yet established.")
     elif args.command == "reconcile":
         receipt = session.reconcile()
     elif args.command == "apply":

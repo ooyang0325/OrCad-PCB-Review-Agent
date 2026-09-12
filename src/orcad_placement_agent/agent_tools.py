@@ -9,6 +9,7 @@ from typing import Callable
 import uuid
 
 from .diagnostics import ConfigurationError, default_runtime_directory
+from .design_copy import DesignCopyError
 from .capabilities import backend_capabilities
 from . import expertise
 from .protocol import MAX_BYTES, MAX_METADATA_BYTES, ProtocolError, Receipt, identifier, number
@@ -16,6 +17,10 @@ from .proposals import approve_and_apply, load_proposal, propose, proposal_summa
 from .session import Session, SessionError, write_json
 from .transport import IndeterminateDelivery, TransportError
 from .save_proposals import prepare_save, load_save, approve_save, save_status
+from .library_load import (
+    approve_libraries, library_status, load_library_proposal, pinned_library_bundle,
+    prepare_libraries, setup_inventory,
+)
 
 
 class AgentActionError(ValueError):
@@ -65,15 +70,26 @@ def capture_visual(session: Session) -> dict[str, object]:
         raise AgentActionError(f"Visual inspection is unavailable: {error}") from error
 
 
+def capture_library_visual(session: Session) -> dict[str, object]:
+    from .visuals import VisualError, capture_observation
+
+    try:
+        return capture_observation(session, snapshot_operation="library_snapshot")
+    except VisualError as error:
+        raise AgentActionError(f"Library-setup visual inspection is unavailable: {error}") from error
+
+
 class AgentActions:
     def __init__(
         self, root: Path | None = None, *,
         session_factory: Callable[[Path], Session] = Session,
         capture: Callable[[Session], dict[str, object]] = capture_visual,
+        library_capture: Callable[[Session], dict[str, object]] = capture_library_visual,
     ) -> None:
         self.root = (root if root is not None else default_runtime_directory()).resolve()
         self.session_factory = session_factory
         self.capture = capture
+        self.library_capture = library_capture
 
     def session(self, name: str) -> Session:
         if not isinstance(name, str) or re.fullmatch(r"board-[A-Za-z0-9_-]{1,64}", name) is None:
@@ -83,8 +99,8 @@ class AgentActions:
             raise AgentActionError("Session must be a direct child of the managed runtime.")
         return self.session_factory(path)
 
-    def observation(self, session: Session) -> dict[str, object]:
-        observation = self.capture(session)
+    def observation(self, session: Session, *, library_setup: bool = False) -> dict[str, object]:
+        observation = self.library_capture(session) if library_setup else self.capture(session)
         if not isinstance(observation, dict) or not isinstance(observation.get("image_path"), str):
             raise AgentActionError("Capture returned invalid visual metadata.")
         observation_id = identifier(observation.get("observation_id"))
@@ -129,7 +145,8 @@ class AgentActions:
             "snapshot_id": proposal["snapshot_id"],
             "visual": observation,
             "approval_prompt": f"APPLY {digest}",
-            "warning": "Memory only. Native preconditions are rechecked after approval; this is not a save.",
+            "warning": "Memory only. Native preconditions are rechecked after approval; this is not a save."
+                       + receipt.attachment_warning,
         }
 
     def dispatch(self, request: dict[str, object]) -> dict[str, object]:
@@ -164,6 +181,7 @@ class AgentActions:
                         session = self.session(path.name)
                         entry = {"session": path.name, "working_board": str(session.working)}
                         entry["native_model"] = getattr(session, "model", "fixture")
+                        entry["allow_unverified_3d"] = getattr(session, "allow_unverified_3d", False)
                         if getattr(session, "design_copy", None) is not None:
                             entry["design_copy"] = session.design_summary()
                         if (session.root / "editor.json").is_file():
@@ -189,12 +207,50 @@ class AgentActions:
             "describe-save": {"action", "session", "proposal"},
             "apply-save": {"action", "session", "proposal", "confirmation"},
             "save-status": {"action", "session", "proposal"},
+            "inspect-libraries": {"action", "session"},
+            "prepare-libraries": {"action", "session"},
+            "describe-libraries": {"action", "session", "proposal"},
+            "load-libraries": {"action", "session", "proposal", "confirmation"},
+            "library-status": {"action", "session", "proposal"},
         }
         if action not in allowed or set(request) != allowed[action]:
             raise AgentActionError("Unsupported action or unexpected/missing fields.")
         if not all(isinstance(value, str) for value in request.values()):
             raise AgentActionError("Agent action values must be strings.")
         session = self.session(request["session"])
+        if action == "library-status":
+            return library_status(session, request["proposal"])
+        if action in {"inspect-libraries", "prepare-libraries"}:
+            if session.model != "managed-board-v1" or session.design_copy is None:
+                raise AgentActionError("Library setup requires a complete staged managed design.")
+            observation = self.observation(session, library_setup=True)
+            receipt = self.snapshot(session, observation)
+            inventory = setup_inventory(receipt)
+            if action == "inspect-libraries" or not inventory["missing_packages"]:
+                return {"status": "library_inventory", "inventory": inventory, "visual": observation,
+                        "placement_ready": False, "message": "Library setup evidence only; no definitions loaded."}
+            digest, _ = prepare_libraries(session, receipt)
+            write_json(session.root / f"visual-library-proposal-{digest}.json",
+                       {"proposal": digest, "observation_id": observation["observation_id"]})
+            return {"status": "prepared", **self.describe_libraries(session, digest)}
+        if action in {"describe-libraries", "load-libraries"}:
+            description = self.describe_libraries(session, request["proposal"])
+            if action == "describe-libraries":
+                return {"status": "prepared", **description}
+            receipt = approve_libraries(session, request["proposal"], request["confirmation"])
+            result = {**library_status(session, request["proposal"]), "proposal": request["proposal"]}
+            from .visuals import VisualError
+
+            try:
+                observation = self.observation(session, library_setup=True)
+                result["visual"] = observation
+                if receipt.records and self.snapshot(session, observation).scene != receipt.scene:
+                    result["visual_error"] = "Setup scene changed after the recorded library outcome; do not replay."
+            except (VisualError, AgentActionError, ProtocolError, SessionError, TransportError, OSError) as error:
+                result["visual_error"] = str(error)
+                result["message"] = "Recorded library outcome stands; recover inspection without resending LOAD."
+            write_json(session.root / f"agent-libraries-{receipt.request_id}.json", result)
+            return result
         if action == "save-status":
             return save_status(session, request["proposal"])
         if action == "prepare-save":
@@ -286,7 +342,7 @@ class AgentActions:
                 return {"status": "idle", "message": "No unresolved operation is recorded; nothing was resent."}
             pending = session._read_json("pending.json")
             request_id = identifier(pending.get("request_id"))
-            if pending.get("operation") != "snapshot":
+            if pending.get("operation") not in {"snapshot", "library_snapshot"}:
                 return {
                     "status": "blocked", "message": "The pending operation is not read-only. Use its proposal execution status.",
                 }
@@ -298,7 +354,7 @@ class AgentActions:
                 }
             if requested != request_id:
                 raise AgentActionError("A different inspection is pending; it was not reconciled.")
-            receipt = session.reconcile(expected_request_id=request_id, expected_operation="snapshot")
+            receipt = session.reconcile(expected_request_id=request_id, expected_operation=pending["operation"])
             return {
                 "status": "inspection_reconciled", "request": request_id,
                 "receipt": receipt.to_dict(), "message": "Read-only result reconciled without replay.",
@@ -308,7 +364,8 @@ class AgentActions:
             return {
                 "status": "observed", "session": session.root.name,
                 "visual": observation, "snapshot": self.snapshot(session, observation).to_dict(),
-                "warning": "Pixels do not establish DRC, complete layer coverage, or electrical correctness.",
+                "warning": "Pixels do not establish DRC, complete layer coverage, or electrical correctness."
+                           + self.snapshot(session, observation).attachment_warning,
             }
         if action == "prepare":
             observation = self.observation(session)
@@ -407,7 +464,43 @@ class AgentActions:
             "session": session.root.name, "proposal_sha256": digest, "visual": observation,
             "working_board": str(session.working), "destination": str(destination),
             "summary": f"Save this exact reviewed board state to a new revision: {destination}",
-            "warning": "Separate SAVE approval required. No source overwrite; no automatic reopen or manufacturing certification.",
+            "warning": "Separate SAVE approval required. No source overwrite; no automatic reopen or manufacturing certification."
+                       + receipt.attachment_warning,
+        }
+
+    def describe_libraries(self, session: Session, digest: str) -> dict[str, object]:
+        proposal = load_library_proposal(session, digest)
+        binding = session._read_json(f"visual-library-proposal-{digest}.json")
+        if binding.get("proposal") != digest:
+            raise AgentActionError("Library proposal lacks its exact visual binding.")
+        observation_id = identifier(binding.get("observation_id"))
+        observation = session._read_json(f"visual-{observation_id}.json")
+        receipt = self.snapshot(session, observation)
+        setup_inventory(receipt)
+        if receipt.scene_digest != proposal["scene_digest"] or receipt.one("snapshot")[1] != proposal["snapshot_id"]:
+            raise AgentActionError("Library visual evidence does not match the approved inventory.")
+        image = session.root / f"visual-{observation_id}.png"
+        if Path(observation["image_path"]).resolve() != image or not image.is_file():
+            raise AgentActionError("Library setup image is unavailable.")
+        with pinned_library_bundle(session, proposal):
+            pass
+        session.verify_source()
+        return {
+            "session": session.root.name, "proposal_sha256": digest, "visual": observation,
+            "working_board": str(session.working), "packages": proposal["packages"],
+            "assets": proposal["assets"], "cache_id": proposal["cache_id"],
+            "summary": (
+                "Load these missing package definitions: " + ", ".join(proposal["packages"])
+                + "\nVerified staged files:\n"
+                + "\n".join(f"{asset['filename']} ({asset['size']} bytes) from {asset['path']}"
+                            for asset in proposal["assets"])
+            ),
+            "warning": (
+                "LOAD changes in-memory library definitions only, not component placement or the saved board. "
+                "Existing embedded pad/flash definitions are preserved, not refreshed from disk. "
+                "The current editor's search paths are restored after the operation. Partial loading is possible; "
+                "use the exact outcome/status, never replay an approval. Full placement compatibility is checked separately."
+            ) + receipt.attachment_warning,
         }
 
 
@@ -423,7 +516,7 @@ def main() -> int:
     except IndeterminateDelivery as error:
         print(json.dumps({"status": "indeterminate", "error": str(error), "retry": False}))
         return 3
-    except (AgentActionError, ConfigurationError, ProtocolError, SessionError, TransportError,
+    except (AgentActionError, ConfigurationError, DesignCopyError, ProtocolError, SessionError, TransportError,
             OSError, UnicodeError, json.JSONDecodeError) as error:
         print(json.dumps({"status": "error", "error": str(error)}, ensure_ascii=True))
         return 2

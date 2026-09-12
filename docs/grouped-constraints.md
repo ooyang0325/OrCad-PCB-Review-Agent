@@ -91,9 +91,15 @@ apply. All diagnostic reports and board/library binaries remain local-only.
 
 Unused package definitions may be purged when an all-unplaced board is saved.
 Library preparation therefore needs to make the correct definitions available
-in the active staged editor before attachment; saving a library-loaded but
-still-unplaced board is not proof that the definitions will survive reopening.
-This release does not add an automatic library-loading/import operation.
+in the active staged editor before full placement inspection; saving a
+library-loaded but still-unplaced board is not proof that the definitions will
+survive reopening.
+The [approved library-loading workflow](library-loading.md) can now prepare and
+load exact missing definitions from the staged project after the operator's
+separate all-unplaced `attach --library-setup` binding. It is not an implicit
+side effect of staging or attachment and does not import logical designs.
+LOAD is non-atomic, separately human-approved and in memory only; native LOAD
+acceptance is pending. Full placement geometry checks remain independent.
 
 Full-folder [design staging](design-staging.md) now copies local project
 libraries and related files alongside the protected working board. This resolves

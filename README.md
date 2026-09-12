@@ -50,11 +50,11 @@ project tree or `--board-only` to copy just the board. File copying does not
 implicitly load libraries or change editor settings.
 
 The controller sends bounded requests to a small SKILL adapter in a
-dedicated visible editor holding a disposable board copy. Every change will
-require approval of its exact target pose and current board state. Apply and
-save will be separate operations.
+dedicated visible editor holding a disposable board copy. Every mutation
+requires its exact proposal and fresh board-state preconditions. Library LOAD,
+placement APPLY and revision SAVE are separately approved operations.
 
-Arbitrary production boards, raw schematic/netlist import, unloaded-footprint
+Arbitrary production boards, raw schematic/netlist import, arbitrary library
 acquisition, routing, Presto, headless execution, remote access, and arbitrary
 SKILL evaluation remain outside the supported native boundary.
 
@@ -74,7 +74,20 @@ Other footprint, routing and native-approval limitations still apply.
 [Group-aware constraints](docs/grouped-constraints.md) preserve flat room/net
 groups, named physical/spacing/same-net sets, and ROOM assignments instead of
 requiring users to delete them. Missing package definitions remain an explicit
-library-preparation blocker; group support does not silently import footprints.
+library-preparation blocker until separately resolved; group support does not
+silently import footprints.
+
+Version 0.9.0 adds [approved library setup](docs/library-loading.md) for
+all-unplaced `managed-board-v1` designs with known logical inventory.
+The operator uses `attach --library-setup`; `pcb_inspect_libraries` and
+`pcb_prepare_library_load` inspect and prepare exact missing definitions from
+a bounded, verified staged PSM/PAD/FSM/SSM cache. Only the executor requests
+the human's exact LOAD through `pcb_load_libraries`; recover with
+`pcb_library_load_status`, never a replay. Loading is non-atomic and in memory
+only: partial/uncertain outcomes are possible. It is not import, refresh of
+existing definitions, placement, Save, persistence or global configuration.
+Full `pcb_inspect` must separately pass the supported placement-geometry gates.
+**Native library-load acceptance is pending.**
 
 The supplied `doc` manuals and `pcb_design_book` references remain local-only.
 Do not commit them, vendor libraries, or native working board files.
@@ -144,9 +157,11 @@ It now uses an executable mission engine, not just role handoffs:
 `pcb_plan_placement`, `pcb_prepare_next_placement`, and `pcb_placement_status`.
 The default fixture model stays unchanged. The explicit managed model implements
 initial placement under its restricted geometry/library conditions.
-**Raw empty-design import and missing footprint loading remain intake blockers;
-native end-to-end acceptance is not yet complete.** No empty inventory is
-reported complete and no routing or electrical certification is implied.
+**Raw empty-design import remains an intake blocker. Missing definitions may
+use the separate approved setup workflow; unresolved libraries and unsupported
+geometry still block placement. Native end-to-end acceptance is not yet
+complete.** No empty inventory is reported complete and no routing or electrical
+certification is implied.
 
 ## Portable clients
 

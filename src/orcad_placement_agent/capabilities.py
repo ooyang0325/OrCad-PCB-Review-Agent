@@ -14,6 +14,10 @@ def backend_capabilities() -> dict[str, object]:
         "native_models": ["fixture", "managed-board-v1"],
         "native_acceptance": "Managed-board initial placement and mutations require dedicated live acceptance; not established by unit tests.",
         "logical_design_import": False,
+        "approved_library_loading": True,
+        "library_setup_model": "library-setup-v1",
+        "library_setup_scope": "All logical components unplaced; verified staged assets only; exact human LOAD approval; no implicit placement, import, Save or global settings.",
+        "attachment_verification": "Complete exported-byte SHA-256 by default. Explicit --allow-unverified-3d staging may retain only metadata for 3D:.../ACIS attachments; no 3D preservation or mechanical-clearance claim.",
         "initial_component_placement": True,
         "initial_placement_model": "managed-board-v1",
         "placement_missions": True,
@@ -42,8 +46,8 @@ def backend_capabilities() -> dict[str, object]:
             "millimeters/4/10000; named physical/spacing/same-net Csets and positive planes supported. "
             "No routing, package/unattached text, unmapped logical functions, nested/component groups, "
             "advanced pads, electrical Csets or class/region constraint overrides. "
-            "Native attachments must be readable within the bounded exported-byte model. "
-            "Missing definitions and raw empty-design import remain explicit intake blockers. "
+            "Native attachments must be readable within the bounded exported-byte model, except explicitly opted-in metadata-only embedded 3D attachments. "
+            "Missing definitions require the separate approved library-setup workflow; raw empty-design import remains an intake blocker. "
             "The legacy fixture model does not initially place components."
         ),
     }

@@ -14,9 +14,9 @@ Select **PCB placement orchestrator** in a client supporting repository agents,
 or invoke `pcb-placement-orchestrate` from the installed plugin. Supply the
 mission intake below; do not supply a generic "place everything" request without
 a verified design inventory. Bundled expertise and full rule lookup need no
-textbooks or index. Version 0.5.0 adds experimental managed-board missions.
-Upgrade/restart existing
-installs deliberately to receive the new tools.
+textbooks or index. Version 0.5.0 adds experimental managed-board missions;
+version 0.9.0 adds separate approved library setup. Upgrade/restart existing
+installs deliberately and stage a matching bootstrap to receive the new tools.
 
 Optionally prepare routing-focused context without opening or changing a board:
 
@@ -41,6 +41,7 @@ operations. This is software scope, not proof of a live license or open board.
 | Inspect the supported board and return PNG/native evidence | Supported after staging/attachment |
 | Move/rotate an already-placed original-fixture symbol | Implemented, subject to exact approval and native gates |
 | Import a schematic/netlist or resolve arbitrary libraries | Not implemented |
+| Load exact missing package definitions from verified staged files | Separate all-unplaced managed-board-v1 setup binding and human LOAD approval; non-atomic, in memory only; native acceptance pending |
 | Initially place an unplaced logical component | Implemented for explicit managed-board-v1 with embedded simple SMT footprints; native acceptance pending |
 | Plan complete target sets and reconcile fresh placement coverage | Implemented, with pin-based routing proxies and explicit constraints |
 | Save a new revision through an agent | Separate exact human SAVE approval; no implicit reopen |
@@ -50,10 +51,15 @@ operations. This is software scope, not proof of a live license or open board.
 Zero physically placed components is supported by the new implementation when
 the staged board already contains the logical inventory and embedded geometry.
 Check the exact session model: the default fixture model does not gain initial
-placement. Missing libraries, empty logical designs and unsupported topology
-remain blockers. Do not bypass them with raw commands. An older server without
-a declaration is unknown, not implicitly capable. Native acceptance still
-requires a dedicated fixture and genuine interactive approval.
+placement. Missing libraries block full placement inspection until the separate
+[library-setup phase](library-loading.md) succeeds. Only known all-unplaced
+managed-board-v1 inventory and bounded verified staged PSM/PAD/FSM/SSM files
+qualify; unsupported setup, empty logical designs and unsupported topology
+remain blockers. LOAD is not import, existing-definition refresh, placement,
+Save, persistence or global configuration. Normal `pcb_inspect` still separately
+gates complex geometry afterward. Do not bypass blockers with raw commands.
+An older server without a declaration is unknown, not implicitly capable.
+Native acceptance still requires a dedicated fixture and genuine interactive approval.
 
 ## Mission intake
 
@@ -79,6 +85,7 @@ to manufacture a clean starting state.
 | Phase | Owner and output | Exit gate |
 |---|---|---|
 | Intake and capability check | Coordinator: inventory, constraints, missing-input/backend queue | Expected assembly and supported operations are explicit |
+| Missing-library setup, when required | Operator attaches with `--library-setup`; planner prepares, reviewer checks, executor requests exact LOAD | Actual load outcome reconciled and normal full placement inspection succeeds; no persistence inferred |
 | Functional floorplan | Planner: regions, signal/power flow, anchors and alternatives | Reviewer accepts the assumptions for human engineering review |
 | Mechanical anchors | Planner/reviewer/executor loop | Exact supported poses, human approval and fresh native/visual readback |
 | Critical groups | Same loop: ICs/converters/clock/RF/analog with their confirmed local passives | Escape and critical loop/return requirements remain feasible |
@@ -89,8 +96,11 @@ to manufacture a clean starting state.
 
 The coordinator delegates only the three named PCB roles. Its `agent`/`todo`
 tools support coordination and tracking, not general coding, shell access, or
-permission bypass. The three workers retain their existing scope. All four
-agents inspect actual PNGs and reference corresponding native facts.
+permission bypass. The three workers retain their bounded scope. All four
+agents inspect actual PNGs and reference corresponding native facts. For library setup, use
+`pcb_inspect_libraries`, planner `pcb_prepare_library_load`, executor
+`pcb_load_libraries` and read-only `pcb_library_load_status`. The coordinator
+does not prepare or load directly. A setup image is not full placement evidence.
 
 Serialize native editor access, including overlapping inspections. Offline
 analysis can be parallel when it does not compete for the editor. Every worker
@@ -113,8 +123,10 @@ Each work package states:
 The planner returns alternatives, targets, rationale and tradeoffs. The
 reviewer returns independent findings and missing inputs, not authorization.
 The executor returns the native result and post-image; it does not invent a
-replacement pose or approve itself. A denied/rolled-back/unknown result never
-advances the placed inventory.
+replacement pose or package/file list, or approve itself. A denied/rolled-back/
+unknown result never advances the placed inventory. LOAD success does not
+advance it either; partial/uncertain definition loading is not a rolled-back
+placement transaction.
 
 If the host cannot delegate, use explicit sequential role handoffs and disclose
 the lack of independent execution contexts. Do not pretend a skill name is a
@@ -160,7 +172,11 @@ unverified**. It must not become **fully routed** or **manufacturing-ready**
 without the corresponding independent evidence.
 
 After an uncertain operation, reconcile its exact request/proposal before
-continuing. Never retry an Apply, clear unrelated pending state, substitute a
+continuing. Use `pcb_library_load_status` for an exact LOAD proposal; do not
+infer rollback or retry after a partial/uncertain result. A detected cache
+change, even transient, or a break in file-lock/cache-monitoring continuity
+requires the documented stop/fresh-staging recovery, not another write.
+Never retry an Apply or LOAD, clear unrelated pending state, substitute a
 different board, enable writes, change client modes, or answer approval prompts.
 Planning may run autonomously; physical changes still require the existing
 genuine interactive human-approval workflow.

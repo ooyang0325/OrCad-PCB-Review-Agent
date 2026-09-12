@@ -180,10 +180,10 @@ class AgentProfileTests(unittest.TestCase):
         self.assertEqual(len(profiles), 4)
         extra_tools = {
             "pcb-placement-planner.agent.md": {"pcb_prepare_placement", "pcb_plan_placement",
-                                              "pcb_placement_status", "pcb_prepare_next_placement"},
+                                              "pcb_placement_status", "pcb_prepare_next_placement", "pcb_prepare_library_load"},
             "pcb-layout-reviewer.agent.md": {"pcb_execution_status", "pcb_placement_status", "pcb_save_status"},
             "pcb-placement-executor.agent.md": {"pcb_apply_placement", "pcb_execution_status", "pcb_placement_status",
-                                               "pcb_prepare_save", "pcb_save_revision", "pcb_save_status"},
+                                               "pcb_prepare_save", "pcb_save_revision", "pcb_save_status", "pcb_load_libraries"},
             "pcb-placement-orchestrator.agent.md": {"agent", "todo", "pcb_execution_status", "pcb_plan_placement",
                                                    "pcb_placement_status", "pcb_save_status"},
         }
@@ -197,7 +197,8 @@ class AgentProfileTests(unittest.TestCase):
             self.assertEqual(
                 set(json.loads(lines["tools"])),
                 {"read", "search", "pcb_sessions", "pcb_inspect", "pcb_inspection_status",
-                 "pcb_reference_catalog", "pcb_reference_search", "pcb_reference_rule"} | extra_tools[profile.name],
+                 "pcb_reference_catalog", "pcb_reference_search", "pcb_reference_rule",
+                 "pcb_inspect_libraries", "pcb_library_load_status"} | extra_tools[profile.name],
             )
             self.assertLess(len(prompt), 30000)
             self.assertIn("PNG", prompt)

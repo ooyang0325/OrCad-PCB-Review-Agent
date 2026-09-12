@@ -2,6 +2,7 @@ from dataclasses import asdict
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from orcad_placement_agent.protocol import ProtocolError, Request, encode_rows
 from orcad_placement_agent.session import Session, SessionError, stage_session, write_json, write_new
@@ -85,6 +86,17 @@ class SessionTests(unittest.TestCase):
         self.assertFalse((self.root / "pending.json").exists())
         self.assertTrue((self.root / ("a" * 32 + ".receipt.json")).exists())
 
+    def test_dispatch_uses_the_same_bounded_total_deadline_as_receipt_waiting(self):
+        def send(*_args, **options):
+            self.assertEqual(options["timeout_ms"], 60000)
+            self.time += 60
+
+        with patch.object(self.transport, "send", side_effect=send):
+            with self.assertRaises(IndeterminateDelivery):
+                self.session.exchange(self.request(), EDITOR, timeout=60)
+        self.assertEqual(self.time, 60)
+        self.assertTrue((self.root / "pending.json").is_file())
+
     def test_duplicate_request_is_never_dispatched_twice(self):
         self.session.exchange(self.request(), EDITOR)
         with self.assertRaises(FileExistsError):
@@ -152,6 +164,31 @@ class SessionTests(unittest.TestCase):
         with self.assertRaises(SessionError):
             self.session.exchange(self.request(), EDITOR)
         self.assertEqual(self.transport.sent, 0)
+
+    def test_native_cannot_silently_enable_unverified_3d_for_a_strict_session(self):
+        def response(request_id):
+            return encode_rows([
+                ("OPA", "1", self.session.nonce, request_id, "snapshot"),
+                ("message", "Wrong native policy"),
+                ("attachment-policy", "allow-unverified-embedded-3d-v1"),
+                ("attachment-unverified", "3D:example.stp/ACIS"), ("end", request_id),
+            ])
+
+        with patch.object(self.transport, "response", side_effect=response):
+            with self.assertRaisesRegex(ProtocolError, "operator choice"):
+                self.session.exchange(self.request(), EDITOR)
+        self.assertTrue((self.root / "pending.json").is_file())
+
+    def test_unverified_library_outcome_blocks_writes_but_allows_readback(self):
+        digest = "c" * 64
+        write_json(self.root / f"library-approval-{digest}.json", {
+            "proposal": digest, "request_id": "d" * 32, "confirmation": f"LOAD {digest}",
+        })
+        with self.assertRaisesRegex(SessionError, "asset-lock continuity"):
+            self.session.exchange(Request(self.session.nonce, "e" * 32, "apply", "f" * 32,
+                                          "R1", "12", "12", "90"), EDITOR)
+        self.assertEqual(self.transport.sent, 0)
+        self.assertEqual(self.session.exchange(self.request(), EDITOR).status, "snapshot")
 
     def test_lock_prevents_concurrent_exchange(self):
         (self.root / ".inflight").mkdir()

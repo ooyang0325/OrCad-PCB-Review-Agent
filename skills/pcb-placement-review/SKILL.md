@@ -16,11 +16,14 @@ not raw SKILL, shell commands, GUI automation, or a different integration.
 
 ## Review sequence
 
-1. Call `pcb_inspect` and personally examine the returned PNG. Do not rely only
+1. For placement call `pcb_inspect`; for an explicitly bound library-setup
+   proposal call `pcb_inspect_libraries`. Personally examine the returned PNG.
+   A setup snapshot is not full placement readiness. Do not rely only
    on the planner's image description. Identify the observation and any hidden
    layers, poor framing or ambiguous labels.
 2. Correlate the image with native coordinates/fixed state and the exact
-   proposed pose. Archived snapshots are not live approval preconditions.
+   proposed pose, or with the exact native missing-package inventory and staged
+   file list for library setup. Archived snapshots are not live approval preconditions.
 3. Retrieve cited rules using `pcb_reference_rule`, with
    `pcb_reference_search`/`pcb_reference_catalog` for additional guidance.
    Built-in expertise needs no books or index; never ask for textbooks.
@@ -35,13 +38,40 @@ not raw SKILL, shell commands, GUI automation, or a different integration.
    manufacturing evidence. Neither a screenshot nor a DRC count proves all of
    them. Do not invent universal numerical rules or source support.
 
+## Library-setup review
+
+Review only an operator-bound, all-unplaced managed-board-v1 setup with known
+nonempty logical inventory (`attach --library-setup`). Missing footprints block
+placement until separately resolved. The planner's `pcb_prepare_library_load`
+proposal must identify only missing package roots and the bounded verified
+staged PSM/PAD/FSM/SSM cache. Challenge unresolved dependencies, conflicts,
+existing-definition refresh, inferred pin geometry and any expansion into
+arbitrary paths, import, placement, Save or global settings.
+
+LOAD requires the executor's exact genuine human approval. It is non-atomic,
+in memory only and can be partial/uncertain; it does not prove rollback or
+persistence. Use `pcb_library_load_status` to read/reconcile its exact outcome,
+never replay it. Even a complete load needs normal full `pcb_inspect`; complex
+geometry can still block placement. Native LOAD acceptance is pending.
+Portable writes are default-disabled; only the operator can opt in with genuine
+interactive input without auto-answer hooks. This role never enables writes.
+
+Challenge any omission of unverified-3D names or warnings from the snapshots
+and LOAD/Apply/SAVE descriptions. The optional operator staging flag
+`--allow-unverified-3d` is not a default or a tool-field toggle: only exact
+nonempty `3D:`/`ACIS` content checks are waived, with metadata and supported
+non-3D SHA-256 protection retained. Models are not deleted or modified.
+Do not interpret the waiver or a favorable review as 3D/mechanical-clearance
+verification.
+
 For an executed proposal, `pcb_execution_status` reads the recorded outcome
 without replay. If it reports a pending read-only capture, use
 `pcb_inspection_status` with that exact request ID. A missing image does not
 mean an Apply failed or should be repeated.
 
 If evidence or images are unavailable, report that limitation. Do not authorize
-execution, supply an approval phrase, or call `pcb_apply_placement`. The
+execution, supply an approval phrase, prepare a replacement proposal, or call
+`pcb_apply_placement`, `pcb_load_libraries` or `pcb_save_revision`. The
 selected native model's write boundary remains in force for real board reviews.
 For stored missions, use `pcb_placement_status` to examine fresh coverage and
 blockers. Challenge complete target geometry, protected parts, DNP inventory,

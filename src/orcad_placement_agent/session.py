@@ -56,12 +56,14 @@ def write_json(path: Path, value: dict[str, object]) -> None:
 
 def stage_session(
     source: Path, runtime: Path, skill: Path, *, model: str = "fixture",
-    design_root: Path | None = None, board_only: bool = False,
+    design_root: Path | None = None, board_only: bool = False, allow_unverified_3d: bool = False,
 ) -> Path:
     if model not in {"fixture", "managed-board-v1"}:
         raise SessionError("Choose the fixture or managed-board-v1 native model.")
     if board_only and design_root is not None:
         raise SessionError("--board-only and --design-root cannot be combined.")
+    if type(allow_unverified_3d) is not bool or (allow_unverified_3d and (model != "managed-board-v1" or board_only)):
+        raise SessionError("Unverified embedded 3D data requires explicit full-design managed-board staging.")
     try:
         source = resolve_input(source)
     except (DesignCopyError, OSError) as error:
@@ -73,7 +75,7 @@ def stage_session(
         raise SessionError("The Cadence staging directory must be ASCII-safe.")
     names = ("adapter.il", "protocol.il", "placement.il")
     if model == "managed-board-v1":
-        names += ("managed_board.il",)
+        names += ("managed_board.il", "library_setup.il")
     for name in names:
         if not (skill / name).is_file():
             raise SessionError(f"Trusted adapter source is unavailable: {name}")
@@ -113,11 +115,13 @@ def stage_session(
         f"opaNonce = {json.dumps(nonce)}\n"
         f"opaBoardPath = {json.dumps(str(working))}\n"
         f"opaBoardModel = {json.dumps(model)}\n"
+        f"opaUnverified3DNonce = {json.dumps(nonce if allow_unverified_3d else '')}\n"
         f"load({json.dumps(str(root / 'protocol.il'))})\n"
         f"load({json.dumps(str(root / 'placement.il'))})\n"
     )
     if model == "managed-board-v1":
         bootstrap += f"load({json.dumps(str(root / 'managed_board.il'))})\n"
+        bootstrap += f"load({json.dumps(str(root / 'library_setup.il'))})\n"
     bootstrap += f"load({json.dumps(str(root / 'adapter.il'))})\n"
     write_new(root / "bootstrap.il", bootstrap.encode("ascii"))
     metadata = {
@@ -130,6 +134,8 @@ def stage_session(
         write_json(root / MANIFEST_NAME, manifest)
         metadata.update({"schema_version": 3, "model": model,
                          "design_copy_sha256": file_digest(root / MANIFEST_NAME)})
+    if allow_unverified_3d:
+        metadata.update({"schema_version": 4, "allow_unverified_3d": True})
     write_json(root / "session.json", metadata)
     return root
 
@@ -146,19 +152,24 @@ class Session:
         metadata = self._read_json("session.json")
         fields = {"schema_version", "nonce", "source", "source_sha256", "working"}
         version = metadata.get("schema_version")
-        bundled = type(version) is int and version == 3
+        opted_3d = type(version) is int and version == 4
+        bundled = type(version) is int and version in {3, 4}
         managed = metadata.get("schema_version") == 2 and metadata.get("model") == "managed-board-v1"
         extra = {"model", "design_copy_sha256"} if bundled else {"model"} if managed else set()
+        if opted_3d:
+            extra |= {"allow_unverified_3d"}
         if (
             set(metadata) != fields | extra or type(version) is not int
             or (not bundled and not managed and version != 1)
             or (bundled and (not isinstance(metadata["model"], str)
                              or metadata["model"] not in {"fixture", "managed-board-v1"}))
+            or (opted_3d and (metadata.get("allow_unverified_3d") is not True or metadata["model"] != "managed-board-v1"))
             or not all(isinstance(metadata[key], str) for key in
                        ("nonce", "source", "source_sha256", "working"))
         ):
             raise SessionError("Unsupported session metadata.")
         self.model = metadata["model"] if bundled else "managed-board-v1" if managed else "fixture"
+        self.allow_unverified_3d = opted_3d
         self.nonce = identifier(metadata["nonce"])
         self.source = Path(metadata["source"]).resolve(strict=True)
         self.source_digest = metadata["source_sha256"]
@@ -209,16 +220,23 @@ class Session:
             raise SessionError("Invalid editor executable/title.")
         return EditorWindow(**value)
 
-    def bind(self, editor: EditorWindow, timeout: float = 10.0) -> Receipt:
+    def bind(self, editor: EditorWindow, timeout: float = 30.0, *, library_setup: bool = False) -> Receipt:
         if (self.root / "editor.json").exists():
             raise SessionError("This session is already bound; stage a fresh session to retarget.")
-        receipt = self.exchange(Request(self.nonce, uuid.uuid4().hex, "snapshot"), editor, timeout)
+        if library_setup and (self.model != "managed-board-v1" or self.design_copy is None):
+            raise SessionError("Library setup needs a managed-board session with a complete staged design copy.")
+        operation = "library_snapshot" if library_setup else "snapshot"
+        receipt = self.exchange(Request(self.nonce, uuid.uuid4().hex, operation), editor, timeout)
         if receipt.status != "snapshot":
             raise SessionError(f"Adapter refused the handshake: {receipt.message}")
         observed = Path(receipt.one("board")[1]).resolve()
         if observed != self.working:
             raise SessionError("Handshake returned a different board; binding was refused.")
-        if self.model == "managed-board-v1":
+        if library_setup:
+            from .library_load import setup_inventory
+
+            setup_inventory(receipt)
+        elif self.model == "managed-board-v1":
             from .board import from_receipt
 
             from_receipt(receipt)
@@ -229,7 +247,7 @@ class Session:
 
     def exchange(
         self, request: Request, editor: EditorWindow | None = None,
-        timeout: float = 10.0,
+        timeout: float = 30.0,
     ) -> Receipt:
         if not 0 < timeout <= 60:
             raise SessionError("Receipt timeout must be greater than 0 and at most 60 seconds.")
@@ -246,14 +264,33 @@ class Session:
         try:
             if (self.root / "pending.json").exists():
                 raise SessionError("An operation is unresolved; reconcile before sending another.")
+            if request.operation in {"apply", "save", "load_libraries"}:
+                for path in self.root.glob("library-approval-*.json"):
+                    digest = path.name.removeprefix("library-approval-").removesuffix(".json")
+                    if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                        raise SessionError("Malformed library approval state blocks writes.")
+                    approval = self._read_json(path.name)
+                    if (set(approval) != {"proposal", "request_id", "confirmation"}
+                            or approval.get("proposal") != digest or approval.get("confirmation") != f"LOAD {digest}"):
+                        raise SessionError("Invalid library approval state blocks writes.")
+                    if request.operation == "load_libraries" and approval.get("request_id") == request.request_id:
+                        continue
+                    verified_path = self.root / f"library-verified-{digest}.json"
+                    if not verified_path.is_file():
+                        raise SessionError("A library load lost asset-lock continuity; inspect its status and stage a fresh copy before writes.")
+                    from .library_load import library_status
+
+                    if library_status(self, digest)["status"] not in {"libraries_loaded", "library_partial", "rejected"}:
+                        raise SessionError("Invalid library completion state blocks writes.")
             write_new(self.root / f"{request.request_id}.request.csv", payload)
             write_json(self.root / "pending.json", {
                 "request_id": request.request_id, "operation": request.operation,
             })
+            deadline = self.clock() + timeout
             try:
                 self.transport.send(
                     selected, f"opa_{request.operation}", request.request_id,
-                    timeout_ms=min(5000, max(1, int(timeout * 1000))),
+                    timeout_ms=max(1, int(timeout * 1000)),
                 )
             except IndeterminateDelivery:
                 raise
@@ -261,7 +298,6 @@ class Session:
                 # The transport rejected before dispatch; there is no queued move.
                 (self.root / "pending.json").unlink()
                 raise
-            deadline = self.clock() + timeout
             result = self.root / f"{request.request_id}.result.csv"
             while not result.exists():
                 if self.clock() >= deadline:
@@ -280,13 +316,24 @@ class Session:
         receipt = Receipt.decode(result.read_bytes(), self.nonce, request_id)
         allowed = {
             "snapshot": {"snapshot", "rejected"},
+            "library_snapshot": {"snapshot", "rejected"},
+            "load_libraries": {"libraries_loaded", "library_partial", "rejected"},
             "apply": {"applied", "rejected", "rolled_back"},
             "save": {"saved", "rejected"},
         }
         if receipt.status == "indeterminate":
+            if operation == "load_libraries":
+                receipt_path = self.root / f"{request_id}.receipt.json"
+                if not receipt_path.exists():
+                    write_json(receipt_path, receipt.to_dict())
             raise IndeterminateDelivery(receipt.message)
         if receipt.status not in allowed[operation]:
             raise ProtocolError("Receipt status does not match the requested operation.")
+        if receipt.records:
+            receipt.unverified_3d_attachments
+            opted = receipt.attachment_policy == "allow-unverified-embedded-3d-v1"
+            if opted != self.allow_unverified_3d:
+                raise ProtocolError("Native attachment-verification policy differs from the staged operator choice.")
         receipt_path = self.root / f"{request_id}.receipt.json"
         if not receipt_path.exists():
             write_json(receipt_path, receipt.to_dict())
@@ -309,7 +356,7 @@ class Session:
             if set(pending) != {"request_id", "operation"}:
                 raise SessionError("Invalid unresolved-operation metadata.")
             request_id = identifier(pending["request_id"])
-            if pending["operation"] not in {"snapshot", "apply", "save"}:
+            if pending["operation"] not in {"snapshot", "apply", "save", "library_snapshot", "load_libraries"}:
                 raise SessionError("Invalid unresolved operation.")
             if expected_request_id is not None and request_id != expected_request_id:
                 raise SessionError("A different request is pending; nothing was reconciled.")

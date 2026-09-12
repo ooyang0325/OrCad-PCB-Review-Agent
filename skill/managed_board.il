@@ -40,6 +40,93 @@ procedure(opaManagedReadBytes(path maximum)
     )
 )
 
+procedure(opaManagedRotate(value bits)
+    bor(rightshift(value bits) leftshift(value 32 - bits))
+)
+
+procedure(opaManagedHashBlock(state words constants)
+    let((a b c d e f g h first second x y)
+        for(index 16 63
+            x = words[index - 15]
+            y = words[index - 2]
+            words[index] = words[index - 16] + words[index - 7] +
+                bxor(opaManagedRotate(x 7) opaManagedRotate(x 18) rightshift(x 3)) +
+                bxor(opaManagedRotate(y 17) opaManagedRotate(y 19) rightshift(y 10)))
+        a = state[0] b = state[1] c = state[2] d = state[3]
+        e = state[4] f = state[5] g = state[6] h = state[7]
+        for(index 0 63
+            first = h + bxor(opaManagedRotate(e 6) opaManagedRotate(e 11) opaManagedRotate(e 25)) +
+                bxor(band(e f) band(bnot(e) g)) + constants[index] + words[index]
+            second = bxor(opaManagedRotate(a 2) opaManagedRotate(a 13) opaManagedRotate(a 22)) +
+                bxor(band(a b) band(a c) band(b c))
+            h = g g = f f = e e = d + first
+            d = c c = b b = a a = first + second)
+        state[0] = state[0] + a state[1] = state[1] + b
+        state[2] = state[2] + c state[3] = state[3] + d
+        state[4] = state[4] + e state[5] = state[5] + f
+        state[6] = state[6] + g state[7] = state[7] + h
+        t
+    )
+)
+
+procedure(opaManagedFileSignature(path maximum)
+    let((port value count used word words state constants digest)
+        opaRequire(fixp(maximum) && maximum >= 0 && maximum <= 8388608
+            "Invalid native attachment signature byte limit.")
+        ; SHA-256 uses wrapping 32-bit words. SKILL decimal literals above
+        ; INT_MAX saturate, so constants use their signed representations.
+        opaRequire(2147483647 + 1 == bnot(2147483647) && rightshift(-1 1) == 2147483647
+            "Native integer semantics do not support the attachment fingerprint.")
+        constants = listToVector('(
+            1116352408 1899447441 -1245643825 -373957723 961987163 1508970993 -1841331548 -1424204075
+            -670586216 310598401 607225278 1426881987 1925078388 -2132889090 -1680079193 -1046744716
+            -459576895 -272742522 264347078 604807628 770255983 1249150122 1555081692 1996064986
+            -1740746414 -1473132947 -1341970488 -1084653625 -958395405 -710438585 113926993 338241895
+            666307205 773529912 1294757372 1396182291 1695183700 1986661051 -2117940946 -1838011259
+            -1564481375 -1474664885 -1035236496 -949202525 -778901479 -694614492 -200395387 275423344
+            430227734 506948616 659060556 883997877 958139571 1322822218 1537002063 1747873779
+            1955562222 2024104815 -2067236844 -1933114872 -1866530822 -1538233109 -1090935817 -965641998))
+        state = vector(1779033703 -1150833019 1013904242 -1521486534
+            1359893119 -1694144372 528734635 1541459225)
+        words = makeVector(64 0)
+        count = 0 used = 0
+        port = axlDMOpenFile("TEMP" path "rb")
+        opaRequire(port "Cannot read the complete extracted attachment for fingerprinting.")
+        unwindProtect(
+            progn(
+                while(value = getc(port)
+                    value = charToInt(value)
+                    opaRequire(value >= 0 && value <= 255 && count < maximum
+                        "Expanded attachment exceeds its bounded signature budget.")
+                    word = quotient(used 4)
+                    words[word] = bor(words[word] leftshift(value 24 - 8 * mod(used 4)))
+                    count = count + 1 used = used + 1
+                    when(used == 64
+                        opaManagedHashBlock(state words constants)
+                        for(index 0 15 words[index] = 0)
+                        used = 0))
+                word = quotient(used 4)
+                words[word] = bor(words[word] leftshift(128 24 - 8 * mod(used 4)))
+                when(used >= 56
+                    opaManagedHashBlock(state words constants)
+                    for(index 0 15 words[index] = 0))
+                words[14] = 0
+                words[15] = leftshift(count 3)
+                opaManagedHashBlock(state words constants)
+                digest = ""
+                for(index 0 7 digest = strcat(digest sprintf(nil "%08x" state[index])))
+                list(count list("sha256-expanded-v1" digest))
+            )
+            axlDMClose(port)
+        )
+    )
+)
+
+procedure(opaManagedAttachmentPolicy()
+    if(boundp('opaUnverified3DNonce) && opaUnverified3DNonce == opaNonce
+        then "allow-unverified-embedded-3d-v1" else "sha256-all-v1")
+)
+
 procedure(opaManagedAttachments()
     let((names rows metadata attachment total expanded bytes path)
         names = axlGetAllAttachmentNames()
@@ -52,30 +139,30 @@ procedure(opaManagedAttachments()
             metadata = axlGetAttachment(name)
             opaRequire(metadata && metadata->objType == "attachment" &&
                 metadata->id == name && fixp(metadata->size) &&
-                metadata->size >= 0 && metadata->size <= 65536
-                "Native attachment is missing or exceeds the 64 KiB bound.")
+                metadata->size >= 0 && metadata->size <= 8388608
+                "Native attachment is missing or exceeds the 8 MiB bound.")
             total = total + metadata->size
-            opaRequire(total <= 131072 "Native attachments exceed the 128 KiB total bound.")
-            ; String retrieval truncates binary attachments at NUL. Export to a
-            ; temporary file and preserve every byte, without changing the DB.
-            attachment = axlGetAttachment(name 'file)
-            opaRequire(attachment && attachment->id == name &&
-                attachment->dataFormat == 'file && stringp(attachment->data) &&
-                attachment->size == metadata->size && attachment->revision == metadata->revision
-                "Cannot extract the complete native attachment.")
-            path = attachment->data
-            unwindProtect(
-                progn(
-                    bytes = opaManagedReadBytes(path min(65536 131072 - expanded))
-                    expanded = expanded + car(bytes)
-                    ; 'file expands compressed attachments and omits text
-                    ; terminators. Preserve both native size and full exported
-                    ; bytes; the two lengths are not generally equal.
-                    rows = cons(list(name metadata->revision metadata->password metadata->size
-                        car(bytes) cadr(bytes)) rows)
-                )
-                opaRequire(deleteFile(path) "Cannot remove the extracted attachment temporary file.")
-            )
+            opaRequire(total <= 16777216 "Native attachments exceed the 16 MiB total bound.")
+            if(opaManagedAttachmentPolicy() == "allow-unverified-embedded-3d-v1" &&
+                strlen(name) > 8 && substring(name 1 3) == "3D:" &&
+                substring(name strlen(name) - 4) == "/ACIS" then
+                bytes = list(nil list("unverified-embedded-3d-v1"))
+            else
+                ; String retrieval truncates binary attachments at NUL.
+                attachment = axlGetAttachment(name 'file)
+                opaRequire(attachment && attachment->id == name &&
+                    attachment->dataFormat == 'file && stringp(attachment->data) &&
+                    attachment->size == metadata->size && attachment->revision == metadata->revision
+                    strcat("Cannot export complete native attachment bytes: " name))
+                path = attachment->data
+                unwindProtect(
+                    progn(
+                        bytes = opaManagedFileSignature(path min(8388608 16777216 - expanded))
+                        expanded = expanded + car(bytes))
+                    opaRequire(deleteFile(path) "Cannot remove the extracted attachment temporary file.")))
+            ; Native stored size and exported byte count need not be equal.
+            rows = cons(list(name metadata->revision metadata->password metadata->size
+                car(bytes) cadr(bytes)) rows)
         )
         opaSortedData(rows)
     )
@@ -115,7 +202,8 @@ procedure(opaManagedObjectGuard(object)
     opaRequire(!axlDBGetAttachedText(object) ||
         (object->layer == "BOARD GEOMETRY/TOP_ROOM" &&
          member(object->objType '("polygon" "shape")) && length(object->parentGroups) <= 1)
-        "Attached text is supported only on a protected placement-room drawing.")
+        sprintf(nil "Attached text is supported only on a protected placement-room drawing; object type: %s."
+            object->objType))
     t
 )
 
@@ -1290,13 +1378,13 @@ procedure(opaManagedRequireFootprints(design)
                 unless(member(component->package missing)
                     missing = cons(component->package missing))))
         opaRequire(!missing sprintf(nil
-            "Missing embedded package definitions (%d); first required package: %s. Operator library preparation is required; nothing was loaded."
+            "Missing embedded package definitions (%d); first required package: %s. Attach with --library-setup to prepare an approved LOAD from staged files; nothing was loaded."
             length(missing) if(missing then car(opaSort(missing)) else "")))
         t
     )
 )
 
-procedure(opaManagedReadFrame()
+procedure(opaManagedReadFrame(@optional librarySetup)
     let((design units padstacks definitions compdefs common components records shapes boardShapes
          outline keepin keepouts legacy geometry placedCount shapeCount data nets drcs scene
          packageShapes groupData groups rooms assignments roomShapes constraints routeKeepin)
@@ -1306,6 +1394,9 @@ procedure(opaManagedReadFrame()
         units = axlDBGetDesignUnits()
         opaRequire(design && equal(units '("millimeters" 4 10000))
             "Managed boards require millimeters/4/10000.")
+        when(librarySetup
+            opaRequire(!design->symbols
+                "Library setup is limited to a board with no physical symbols."))
         opaManagedObjectGuard(design)
         foreach(check list(
             list("module" !design->module)
@@ -1331,24 +1422,33 @@ procedure(opaManagedReadFrame()
         rooms = cadr(groupData)
         assignments = opaManagedRoomAssignments(design)
         roomShapes = axlDBGetShapes("BOARD GEOMETRY/TOP_ROOM")
-        opaManagedRequireFootprints(design)
-        padstacks = opaManagedPadstacks(design)
-        definitions = opaManagedDefinitions(design padstacks)
+        if(librarySetup then
+            padstacks = opaLibraryPadstacks(design)
+            definitions = opaLibraryDefinitions(design)
+        else
+            opaManagedRequireFootprints(design)
+            padstacks = opaManagedPadstacks(design)
+            definitions = opaManagedDefinitions(design padstacks))
         compdefs = opaSortedData(foreach(mapcar definition design->compdefs
             opaManagedCompdef(definition)))
         common = list(list("attachments" opaManagedAttachments())
+            list("attachment-policy" opaManagedAttachmentPolicy())
             list("groups" groups) list("rooms" rooms) list("room-assignments" assignments)
             list("padstacks" padstacks) list("definitions" definitions)
             list("compdefs" compdefs) list("rules" constraints)
             list("property-dictionary" opaManagedPropertyDictionary())
             list("board" opaBoardPath units axlVersion('fullVersion) opaProps(design)
                 opaManagedBox(axlGetParam("paramDesign")->bBox)))
+        when(librarySetup
+            common = cons(list("library-search-paths" axlGetVariable("psmpath")
+                axlGetVariable("padpath")) common))
         placedCount = 0
         shapeCount = 0
         foreach(component design->components
             opaRequire(member(component->compdef design->compdefs)
                 "Component has an unaccounted logical definition.")
-            data = opaManagedComponent(component definitions padstacks)
+            data = if(librarySetup then opaLibraryComponent(component)
+                else opaManagedComponent(component definitions padstacks))
             opaRequire(!assoc(car(data) components) "Duplicate native reference designator.")
             components = cons(data components)
             when(nth(5 data)
@@ -1420,13 +1520,19 @@ procedure(opaManagedReadFrame()
         components = foreach(mapcar data components append(data list(cadr(nets))))
         common = opaSortedData(cons(list("nets" car(nets)) common))
         drcs = opaManagedDrcs(design)
-        scene = opaManagedCanonical(list(list("common" common) list("components" components)
+        scene = opaManagedCanonical(list(list("inspection-model" if(librarySetup then "library-setup-v1" else "managed-board-v1"))
+            list("common" common) list("components" components)
             list("derived-connectivity" cadr(nets)) list("drc" design->drcState drcs)))
-        records = list(list("board" opaBoardPath) list("model" "managed-board-v1")
+        records = list(list("board" opaBoardPath)
+            list("attachment-policy" opaManagedAttachmentPolicy())
+            list("model" if(librarySetup then "library-setup-v1" else "managed-board-v1"))
             list("units" car(units) sprintf(nil "%d" cadr(units)) sprintf(nil "%d" caddr(units)))
             list("version" axlVersion('fullVersion))
             opaManagedBoxRecord("outline" outline) opaManagedBoxRecord("keepin" keepin)
             list("boundary-model" "polygon-v1"))
+        foreach(attachment cadr(assoc("attachments" common))
+            when(equal(nth(5 attachment) list("unverified-embedded-3d-v1"))
+                records = append(records list(list("attachment-unverified" car(attachment))))))
         records = append(records opaManagedContourRecords("outline" caddr(assoc("outline" common))))
         records = append(records opaManagedContourRecords("keepin" caddr(assoc("keepin" common))))
         foreach(box opaSortedData(keepouts)
@@ -1437,11 +1543,20 @@ procedure(opaManagedReadFrame()
             records = append(records list(list("component" car(data) nth(10 data)
                 opaCoordinate(caadr(data)) opaCoordinate(cadadr(data))
                 sprintf(nil "%d" nth(2 data)) opaFlag(nth(3 data))
-                opaFlag(nth(4 data)) opaFlag(nth(5 data)))
-                opaManagedBoxRecord("bounds" nth(11 data) car(data))))
+                opaFlag(nth(4 data)) opaFlag(nth(5 data)))))
+            unless(librarySetup
+                records = append(records list(opaManagedBoxRecord("bounds" nth(11 data) car(data)))))
             foreach(pin nth(12 data)
-                records = append(records list(list("pin" car(data) car(pin) cadr(pin)
-                    opaCoordinate(car(nth(2 pin))) opaCoordinate(cadr(nth(2 pin))))))))
+                if(librarySetup then
+                    records = append(records list(list("logical-pin" car(data) car(pin) cadr(pin))))
+                else
+                    records = append(records list(list("pin" car(data) car(pin) cadr(pin)
+                        opaCoordinate(car(nth(2 pin))) opaCoordinate(cadr(nth(2 pin)))))))))
+        when(librarySetup
+            foreach(definition design->symdefs
+                records = append(records list(list("definition" definition->type definition->name))))
+            foreach(padstack design->padstacks
+                records = append(records list(list("padstack" padstack->name)))))
         records = append(records opaManagedSceneRecords(scene))
         records = append(records opaManagedPolicyRecords(common rooms assignments groups design components))
         opaManagedRecordBudget(records)

@@ -37,6 +37,20 @@ class DesignCopyTests(unittest.TestCase):
     def stage(self, **options):
         return stage_session(self.board, self.runtime, self.skill, model="managed-board-v1", **options)
 
+    def test_unverified_3d_requires_explicit_session_bound_staging_policy(self):
+        strict = Session(self.stage())
+        self.assertFalse(strict.allow_unverified_3d)
+        selected = Session(self.stage(allow_unverified_3d=True))
+        self.assertTrue(selected.allow_unverified_3d)
+        self.assertEqual(selected._read_json("session.json")["schema_version"], 4)
+        bootstrap = (selected.root / "bootstrap.il").read_text()
+        self.assertIn(f'opaUnverified3DNonce = "{selected.nonce}"', bootstrap)
+        self.assertEqual(selected.working.read_bytes(), self.board.read_bytes())
+        with self.assertRaises(SessionError):
+            self.stage(allow_unverified_3d=True, board_only=True)
+        with self.assertRaises(SessionError):
+            stage_session(self.board, self.runtime, self.skill, allow_unverified_3d=True)
+
     def test_default_copies_complete_tree_and_keeps_controller_files_separate(self):
         for name in ("parts\\cap.psm", "parts\\cap.pad", "parts\\ab00.fsm", "parts\\cap.dra",
                      "pstchip.dat", "pstxprt.dat", "assembly.step", "readme.txt", ".hidden-data",

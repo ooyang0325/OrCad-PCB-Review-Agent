@@ -61,6 +61,37 @@ references outside the selected root are **not followed or rewritten**. Choose
 an appropriate `--design-root` for project-owned sibling assets; this is not an
 automatic dependency resolver for arbitrary external libraries or absolute paths.
 
+## Optional, explicit unverified-3D policy
+
+**Strict attachment-content verification remains the default.** The following
+is an opt-in example only for an operator who has explicitly chosen to waive
+the limited 3D-content check; it is not recommended default setup:
+
+```powershell
+.\.venv\Scripts\python.exe -m orcad_placement_agent stage `
+    'C:\design\your-board.brd' --model managed-board-v1 --allow-unverified-3d
+```
+
+`--allow-unverified-3d` requires `managed-board-v1` and full design-folder
+staging. It cannot be combined with `--board-only`; use `--design-root` if the
+project includes sibling assets. The opted-in session uses schema 4 metadata
+with `allow_unverified_3d=true` and a nonce-bound native bootstrap. This is an
+operator choice at staging, not a mutable agent-tool field or permission to
+edit an existing session's metadata.
+
+Only attachment names matching `3D:<nonempty-name>` with the exact `ACIS`
+class qualify. Their **content verification only** is waived: there is no
+3D-model deletion or modification, and their metadata remains in native state
+comparisons. Supported non-3D attachments retain full streamed SHA-256 content
+protection. The flag does not suppress arbitrary attachment errors or change
+placement geometry, library, approval or persistence requirements.
+
+Both full-placement and library-setup snapshots disclose the exact unverified
+3D names and warnings. LOAD, Apply and SAVE descriptions retain the warning;
+agents must carry it through review and handoff. This policy does **not** verify
+3D models or mechanical clearance. Library setup remains all-unplaced, and
+neither staging nor this flag authorizes a LOAD.
+
 ## Explicit single-board mode
 
 To retain the original behavior:
@@ -70,9 +101,11 @@ To retain the original behavior:
     'C:\design\your-board.brd' --model managed-board-v1 --board-only
 ```
 
-`--board-only` and `--design-root` cannot be combined. Existing single-board
-session schemas remain readable; new design-folder sessions use schema 3 and
-bind their copy manifest to the session metadata.
+`--board-only` cannot be combined with `--design-root` or
+`--allow-unverified-3d`. Existing single-board and strict design-folder session
+schemas remain readable. Design-folder sessions bind their copy manifest to
+the session metadata; the optional unverified-3D policy uses schema 4 as
+described above.
 
 ## What is excluded
 
@@ -122,14 +155,20 @@ automatically synchronize after the source project changes.
 
 Output reports the copied `psmpath` and `padpath` **candidate directories**, plus
 package/padstack/flash counts. Duplicate library filenames in separate folders
-are preserved and flagged so the operator can choose the intended search paths.
+are preserved and flagged. The separate bounded loader rejects conflicting
+same-named file contents; it does not choose a search-order winner.
 Non-ASCII library-directory paths are reported for native compatibility review.
 
 **Staging does not configure Cadence paths or load package definitions.**
 It also does not open the editor, import a netlist, place components or save a
-board. The copied files make subsequent explicit library preparation possible;
-an all-unplaced board can still require definitions to be loaded into the active
-staged editor before the managed handshake succeeds.
+board. The copied files make subsequent [explicit library setup](library-loading.md)
+possible. For all-unplaced managed-board-v1 inventory, `attach --library-setup`
+binds the staged editor without claiming full placement readiness. Preparation
+verifies staged PSM/PAD/FSM/SSM files and creates a bounded cache; only a separate
+exact human LOAD authorizes in-memory definition loading. Full placement
+inspection remains required afterward and can reject unsupported geometry.
+Loading is non-atomic, may be partial/uncertain, and does not refresh existing
+definitions or establish persistence. Native LOAD acceptance is pending.
 
 Add `--json` for a structured result containing the session/working-board paths,
 load command, copy counts, library directories and warnings. Recorded sessions

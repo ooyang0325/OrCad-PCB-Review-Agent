@@ -38,7 +38,19 @@ with distinct `source_kind` values. Missing/stale/corrupt supplements produce
 warnings without disabling real bundled expertise. `pcb_reference_page` is
 strictly for original PDF excerpts and errors when no local index is configured.
 Install `.[knowledge]` only when extracting PDFs; catalog notices expose gaps.
-The server has sixteen tools; all reference operations are read-only.
+The server has twenty tools; all reference operations are read-only.
+
+`pcb_inspect_libraries`, `pcb_prepare_library_load`, `pcb_load_libraries`, and
+`pcb_library_load_status` implement separate [approved library setup](library-loading.md).
+The LOAD tool is default-disabled with other portable writes, uses its own
+hidden exact-human approval, and does not place components or save the board.
+The operator first uses `attach --library-setup` for explicitly staged,
+all-unplaced managed-board-v1 inventory. Preparation is limited to a verified
+bounded staged PSM/PAD/FSM/SSM cache. LOAD is non-atomic and in memory only,
+with partial/uncertain outcomes possible: it is not import, existing-definition
+refresh, placement, Save, persistence or global configuration. Full
+`pcb_inspect` is still required afterward and may reject complex geometry.
+Native LOAD acceptance is pending.
 
 `pcb_plan_placement`, `pcb_prepare_next_placement`, and `pcb_placement_status`
 implement the [closed-loop mission workflow](placement-missions.md). They
@@ -54,16 +66,17 @@ Portable installs are **read-only by default**. Only the operator may add
 input with no automatic elicitation answers. The flag is not a model tool
 argument, and no installer or marketplace manifest enables it.
 
-Apply and Save have only `session` and `proposal` as model-visible arguments. A hidden
-SDK dependency requests an exact form response. It asks on both
+Apply, LOAD and SAVE have only `session` and `proposal` as model-visible
+arguments. A hidden SDK dependency requests an exact form response. It asks on both
 legacy MCP connections and the newer multi-round-trip protocol; the SDK binds
 continuation state to the originating request and question.
 
 There is no default answer, model confirmation parameter, per-call override,
-or automatic fallback. The response must exactly match `APPLY <proposal-id>` or
-the separately prepared `SAVE <save-proposal-id>`.
+or automatic fallback. The response must exactly match the selected operation's
+`APPLY <proposal-id>`, `LOAD <load-proposal-id>` or separately prepared
+`SAVE <save-proposal-id>`.
 Decline/cancel, wrong answers, missing form elicitation, or an unavailable
-human do not dispatch Apply. The client must render genuine human input;
+human do not dispatch the mutation. The client must render genuine human input;
 protocol capability negotiation
 and an accepted response do not prove a human answered. Copilot Autopilot and
 Claude auto-answering elicitation hooks are specifically unsupported for writes.
@@ -72,7 +85,9 @@ Annotations and automatic tool-call approval are not substitutes.
 The existing controller still rechecks the visually bound proposal and native
 scene and consumes approval once. A transport retry cannot approve a second
 placement. Missing post-images preserve the recorded native outcome; use the
-bounded recovery tools rather than replaying Apply.
+bounded recovery tools rather than replaying Apply, LOAD or SAVE. Reconcile a
+partial/uncertain LOAD with `pcb_library_load_status`; do not claim atomic
+rollback or retry to recover a missing image.
 
 ## Installed packages
 

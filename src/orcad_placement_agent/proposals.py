@@ -40,6 +40,8 @@ class Component:
 def check_snapshot(receipt: Receipt) -> dict[str, Component]:
     if receipt.status != "snapshot":
         raise ProtocolError("A successful read-only snapshot is required.")
+    if any(row[0] == "model" and row[1] != "managed-board-v1" for row in receipt.records):
+        raise ProtocolError("A library-setup or unknown model cannot authorize placement or saving.")
     identifier(receipt.one("snapshot")[1])
     receipt.one("board")
     receipt.one("version")
