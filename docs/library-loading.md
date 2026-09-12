@@ -164,13 +164,27 @@ were subsequently observed **in memory**, with zero symbols placed and the
 raw `psmpath`/`padpath` values restored. However, the terminal outcome is
 **INDETERMINATE**, not an accepted or certified load: full post-load readback
 stopped at `Attached text is supported only on a protected placement-room drawing.`
-The definition-owned attached-text case is under diagnosis. Later diagnostic
-success cannot retrospectively change that original indeterminate receipt.
+The reader blocker is now fixed: symbol-definition and definition-pin attached
+text are fully preserved, including ownership and text-block parameters.
+Full setup readback subsequently succeeded on the halted, loaded copy with
+46 components, 970 records and a 225,871-character scene. That diagnostic
+success does not change the original indeterminate receipt.
+
+Output-preserving serialization optimizations cache stable sort keys, use a
+hash set for atom deduplication, and apply bounded native PCRE ASCII validation
+and CSV quote escaping. Full readback improved from 50.41 to 22.16 wall seconds;
+the complete scene SHA-256 remained
+`f9bbb8982df02be9e3c4831752da6bfb13f1c9746a354b2563edfdab01c4b723`.
+All 315 native pure protocol/ASCII cases passed. These are reader/serialization
+checks, not a new LOAD outcome.
 
 These are live observations, not fake-editor tests. Observing the definitions
 does not establish protected-after-state acceptance. Native writes are halted;
 there is **no completion certificate and no Save**. Do not replay LOAD or
-advance placement from this outcome. Full LOAD acceptance remains pending.
+advance placement from this outcome. A distinct proposal was prepared on a
+freshly staged copy, but its approval prompt timed out. Exact status readback
+reported `not_dispatched` with no consumed approval. Fresh LOAD acceptance
+therefore remains pending; never promote or replay the old receipt.
 
 ## Approval, load and recovery
 

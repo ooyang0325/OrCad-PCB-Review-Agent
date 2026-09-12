@@ -128,9 +128,12 @@ definitions were observed in memory, zero symbols were placed, and raw
 `psmpath`/`padpath` values were restored. The terminal result nevertheless remains
 **INDETERMINATE**: full post-load readback encountered
 `Attached text is supported only on a protected placement-room drawing.`
-Definition-owned attached text is under diagnosis. This is live evidence of
-observed definitions, **not protected-after-state acceptance or an accepted
-LOAD**. Native writes are halted; no completion certificate or Save exists.
+The attached-text reader is now fixed for both symbol definitions and
+definition pins, preserving ownership and text-block parameters. Full setup
+readback succeeded on the halted loaded copy: 46 components, 970 records and
+a 225,871-character scene. This is reader evidence, **not protected-after-state
+acceptance of the original LOAD**. That session's writes remain halted; no
+completion certificate or Save exists.
 The original receipt remains indeterminate regardless of later diagnostic
 success; it must not be rewritten or treated as a retrospectively accepted LOAD.
 The genuine human UI was exercised directly during controlled developer
@@ -150,3 +153,13 @@ or modifying models; metadata comparisons and supported non-3D streamed
 SHA-256 checks remain. Both snapshot forms disclose exact unverified names and
 warnings, retained in LOAD/Apply/SAVE descriptions. This does not establish
 3D/mechanical clearance or a fresh accepted native LOAD.
+
+Output-preserving serialization changes cache stable sort keys, deduplicate
+atoms with a hash set, and use bounded native PCRE ASCII validation/CSV quote
+escaping. Full readback improved from 50.41 to 22.16 wall seconds with the same
+complete scene SHA-256
+`f9bbb8982df02be9e3c4831752da6bfb13f1c9746a354b2563edfdab01c4b723`;
+315 native pure protocol/ASCII cases passed. A fresh proposal on a separately
+staged copy reached the approval prompt, which timed out; exact status confirmed
+`not_dispatched` and no consumed approval. Fresh LOAD acceptance remains pending.
+These diagnostics cannot promote or rewrite the original indeterminate receipt.
