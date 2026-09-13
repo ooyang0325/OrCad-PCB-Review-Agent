@@ -13,27 +13,15 @@ procedure(opaID(value)
 )
 
 procedure(opaField(value)
-    let((index code)
-        opaRequire(stringp(value) "Wire field is not a string.")
-        opaRequire(strlen(value) <= 8192 "Wire field exceeds size limit.")
-        for(index 1 strlen(value)
-            code = charToInt(stringToSymbol(substring(value index 1)))
-            opaRequire(code >= 32 && code <= 126 "Non-ASCII or control character in wire field.")
-        )
-        value
-    )
+    opaRequire(stringp(value) "Wire field is not a string.")
+    opaRequire(strlen(value) <= 8192 "Wire field exceeds size limit.")
+    opaRequire(!pcreMatchp("[^ -~]" value) "Non-ASCII or control character in wire field.")
+    value
 )
 
 procedure(opaCsv(value)
-    let((result index character)
-        opaField(value)
-        result = "\""
-        for(index 1 strlen(value)
-            character = substring(value index 1)
-            result = strcat(result if(character == "\"" then "\"\"" else character))
-        )
-        strcat(result "\"")
-    )
+    opaField(value)
+    strcat("\"" pcreReplace(pcreCompile("\"") value "\"\"" 0) "\"")
 )
 
 procedure(opaNumber(value)
@@ -106,8 +94,16 @@ procedure(opaReadRequest(identifier operation)
         opaRequire(equal(caddr(rows) list("end" identifier)) "Invalid completion marker.")
         params = cadr(rows)
         opaRequire(length(params) == 7 && car(params) == "params" "Invalid parameters record.")
-        if(operation == "snapshot" then
+        if(member(operation '("snapshot" "library_snapshot")) then
             opaRequire(equal(cdr(params) '("" "" "" "" "" "")) "Read request contains write parameters.")
+        else if(operation == "load_libraries" then
+            opaRequire(opaID(nth(1 params)) "Expected library snapshot identifier is required.")
+            opaRequire(equal(list(nth(2 params) nth(3 params) nth(4 params) nth(5 params))
+                '("" "" "" "")) "Library setup cannot include placement coordinates.")
+            opaRequire(strlen(nth(6 params)) == 44 &&
+                substring(nth(6 params) 1 8) == "library-" &&
+                opaID(substring(nth(6 params) 9 32)) &&
+                substring(nth(6 params) 41) == ".csv" "Invalid managed library plan filename.")
         else
             opaRequire(opaID(nth(1 params)) "Expected snapshot identifier is required.")
             if(operation == "apply" then
@@ -127,7 +123,7 @@ procedure(opaReadRequest(identifier operation)
                            substring(nth(6 params) 1 9) == "revision-" &&
                            opaID(substring(nth(6 params) 10 32)) &&
                            substring(nth(6 params) 42) == ".brd" "Invalid revision filename.")
-            )
+            ))
         )
         params
     )
@@ -136,7 +132,7 @@ procedure(opaReadRequest(identifier operation)
 procedure(opaResult(identifier status message records)
     let((temporary destination output rows row values count total text)
         opaRequire(member(status '("snapshot" "applied" "rejected" "rolled_back"
-                                   "saved" "indeterminate")) "Invalid terminal status.")
+                                   "saved" "indeterminate" "libraries_loaded" "library_partial")) "Invalid terminal status.")
         temporary = opaPath(identifier ".result.partial")
         destination = opaPath(identifier ".result.csv")
         opaRequire(!isFile(destination) && !isFile(temporary) "Result already exists; do not overwrite.")

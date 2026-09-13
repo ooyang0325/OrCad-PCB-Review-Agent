@@ -82,7 +82,7 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(len(self.api.sent), 1)
 
     def test_invalid_timeouts_are_rejected_before_dispatch(self) -> None:
-        for timeout in [0, -1, 30001, 1.5, True]:
+        for timeout in [0, -1, 60001, 1.5, True]:
             with self.subTest(timeout=timeout):
                 with self.assertRaises(TransportError):
                     self.transport.send(EDITOR, "opa_apply", REQUEST_ID, timeout)

@@ -21,8 +21,31 @@ performed by the installer.
 The plugin starts **read-only by default**: inspection, visual proposals,
 reference search and recovery are available. The original fixture is the
 default native model. Experimental managed-board-v1 is explicitly selected at
-staging and is limited to documented unrouted, embedded simple SMT geometry;
-it is not arbitrary production-board support. Native acceptance is pending.
+staging. Full placement requires documented unrouted, embedded simple SMT
+geometry; a separate all-unplaced library-setup binding is not placement
+readiness or arbitrary production-board support. Native acceptance is pending.
+
+Version 0.7.0 adds [preserved room/net groups and named Csets](grouped-constraints.md).
+An old `Unsupported managed-board feature: groups` message means the staged
+adapter/runtime needs the new implementation, not that groups should be deleted.
+After upgrading the matching runtime, stage a fresh copy and load its printed
+bootstrap. Missing embedded package definitions are a separate preparation
+requirement; an older staged bootstrap is not updated automatically.
+
+Version 0.8.0 adds [complete design-folder staging](design-staging.md), including
+supporting project files and local footprint/padstack libraries. The copied
+project is isolated from controller files. Copying is not implicit library loading.
+
+Version 0.9.0 adds [separately approved library setup](library-loading.md) for
+known, all-unplaced managed-board-v1 inventory. After staging the project,
+the operator uses `attach --library-setup`. Bounded tools inspect and prepare
+the exact missing package definitions from verified staged PSM/PAD/FSM/SSM
+files; the executor requests genuine human LOAD approval. Loading is non-atomic,
+in memory only, and may be partial or uncertain. It does not import logical
+designs, refresh existing definitions, place components, save, establish
+persistence or change global settings. Normal full placement inspection is
+still required and may reject complex geometry. Native LOAD validation is
+pending; use a matching runtime and freshly staged bootstrap after upgrading.
 
 ## 1. Prepare the runtime once
 
@@ -41,7 +64,7 @@ can replace the explicit interpreter path. Existing developers may use the
 repository's `.venv\Scripts\python.exe`.
 
 The installer creates an owned, versioned environment at
-`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.6.0` and generates client
+`%LOCALAPPDATA%\OrCadPlacementAgent\plugin-envs\0.9.0` and generates client
 snippets inside its `client-configs` directory. It does not change PATH,
 Python 2.7, execution policy, Cadence settings, existing client configuration,
 or any board. Re-running is idempotent for the same installed version; it
@@ -125,7 +148,10 @@ New-Item -ItemType Directory -Path $destination -Force | Out-Null
 foreach ($name in $names) { Copy-Item (Join-Path 'skills' $name) $destination -Recurse }
 ```
 
-Restart/reload the client if needed. Copilot recognizes several skill
+After upgrading, start a new client session or restart the client so skills
+and cached agent tool allowlists are refreshed. Verify the tools available to
+each selected role; hot-reloading the extension alone is not proof that an
+existing role has refreshed. Copilot recognizes several skill
 directories, so avoid installing duplicate copies of the same workflow into
 multiple locations. Plugin installation below bundles both skills and MCP.
 Existing `.github\agents` profiles are for the
@@ -203,6 +229,9 @@ The coordinator manages intake, batches and routing review, but does not add
 raw logical import or routing capabilities. The new mission engine and explicit
 managed-board model implement conditional initial placement; see
 [the executable workflow](placement-missions.md) and its acceptance limits.
+If missing packages block placement, coordinate the separate library-setup
+phase through the same bounded planner/reviewer/executor roles. Preparation
+and a favorable review are not LOAD approval, and LOAD is not placement.
 
 Portable skills guide the client's main agent; they do not remove its other
 tools or act as a sandbox. Configure the host's permissions appropriately.
@@ -223,9 +252,10 @@ Never enable it through an agent tool call or in unattended/autonomous sessions.
 The server still requires the exact phrase, fresh native state, and one-use
 approval; these controls do not attest that an untrusted client used a human.
 
-The app-specific SDK extension separately refuses Apply unless its session mode
-is `interactive`, checked before and after prompting. It never changes modes
-on the user's behalf. Native mutation acceptance remains separately gated.
+The app-specific SDK extension separately refuses Apply, LOAD and SAVE unless
+its session mode is `interactive`, checked before and after prompting. It never
+changes modes on the user's behalf. Native mutation acceptance remains
+separately gated.
 
 ## Package safely and publish deliberately
 
@@ -255,7 +285,9 @@ The package's schemas, official SDK protocol/elicitation behavior, PNG results,
 wheel assets, isolated non-checkout launch, and generated configuration formats
 are exercised locally. Native clients are not installed by these tests, and
 client marketplace discovery/UI behavior is not implied by an MCP handshake.
-No board move or save is performed by installation or packaging.
+No library load, board move or save is performed by installation or packaging.
+The new library-loading workflow's native acceptance remains pending; package
+validation is not evidence of native loading or definition persistence.
 
 References:
 

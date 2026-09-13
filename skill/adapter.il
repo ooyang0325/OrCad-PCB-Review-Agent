@@ -69,11 +69,12 @@ procedure(opaClaim(identifier)
 
 procedure(opaInspectPrivate()
     let((context result)
-        opaRequire(opaDispatchActive && opaFrozen && nth(2 opaFrozen) == "inspect"
+        opaRequire(opaDispatchActive && opaFrozen && member(nth(2 opaFrozen) '("inspect" "library_inspect"))
             "Private inspection requires a validated general gate.")
         context = opaFrozen
         opaFrozen = nil
-        result = errset(opaReadFrame() t)
+        result = errset(if(nth(2 context) == "library_inspect"
+            then opaManagedReadFrame(t) else opaReadFrame()) t)
         opaDispatchResult = if(result then car(result) else nil)
         t
     )
@@ -94,13 +95,28 @@ procedure(opaApplyPrivate()
     )
 )
 
-procedure(opaInspect(identifier)
+procedure(opaInspect(identifier @optional librarySetup)
     opaDispatchResult = nil
-    opaFrozen = list(opaNonce identifier "inspect" nil)
+    when(librarySetup opaRequire(opaManagedMode() "Library setup requires the managed-board model."))
+    opaFrozen = list(opaNonce identifier if(librarySetup then "library_inspect" else "inspect") nil)
     axlShell("opa__inspect")
     opaRequire(!opaFrozen "Native interactive inspection did not dispatch.")
     opaRequire(opaDispatchResult opaError)
     opaDispatchResult
+)
+
+procedure(opaLibrariesPrivate()
+    let((context result)
+        opaRequire(opaDispatchActive && opaFrozen && nth(2 opaFrozen) == "load_libraries"
+            "Private library loading requires a validated general gate.")
+        context = opaFrozen
+        opaFrozen = nil
+        result = errset(opaLoadLibraries(context) t)
+        unless(result when(opaMutationBegan opaHalted = t))
+        opaDispatchResult = if(result then car(result)
+            else list(if(opaHalted then "indeterminate" else "rejected") opaError nil))
+        t
+    )
 )
 
 procedure(opaSaveManaged(identifier params)
@@ -156,6 +172,18 @@ procedure(opaCommand(operation arguments)
                         opaCache(identifier frame)
                         outcome = list("snapshot" "Fresh read-only native board snapshot."
                             append(frame->records list(list("snapshot" identifier)))))
+                    (operation == "library_snapshot"
+                        frame = opaInspect(identifier t)
+                        opaCache(identifier frame)
+                        outcome = list("snapshot" "Library setup inventory only; not placement readiness."
+                            append(frame->records list(list("snapshot" identifier)))))
+                    (operation == "load_libraries"
+                        opaRequire(opaManagedMode() "Library loading requires the managed-board model.")
+                        opaFrozen = list(opaNonce identifier operation copy(params))
+                        opaDispatchResult = nil
+                        axlShell("opa__load_libraries")
+                        opaRequire(!opaFrozen && opaDispatchResult "Native library callback did not complete.")
+                        outcome = opaDispatchResult)
                     (operation == "apply"
                         opaFrozen = list(opaNonce identifier operation copy(params))
                         opaDispatchResult = nil
@@ -188,6 +216,8 @@ procedure(opaCommand(operation arguments)
 procedure(opaSnapshot(@rest arguments) opaCommand("snapshot" arguments))
 procedure(opaApply(@rest arguments) opaCommand("apply" arguments))
 procedure(opaSave(@rest arguments) opaCommand("save" arguments))
+procedure(opaLibrarySnapshot(@rest arguments) opaCommand("library_snapshot" arguments))
+procedure(opaLibraryLoad(@rest arguments) opaCommand("load_libraries" arguments))
 
 procedure(opaViewFit(@rest arguments)
     let((identifier trusted result)
@@ -231,6 +261,12 @@ opaRequire(axlCmdRegister("opa__inspect" 'opaInspectPrivate ?cmdType "interactiv
     "Cannot register private read-only inspection.")
 opaRequire(axlCmdRegister("opa__apply" 'opaApplyPrivate ?cmdType "interactive" ?undo t)
     "Cannot register private undoable apply.")
+opaRequire(axlCmdRegister("opa__load_libraries" 'opaLibrariesPrivate ?cmdType "interactive")
+    "Cannot register private library setup.")
+opaRequire(axlCmdRegister("opa_library_snapshot" 'opaLibrarySnapshot ?cmdType "general")
+    "Cannot register library inspection gate.")
+opaRequire(axlCmdRegister("opa_load_libraries" 'opaLibraryLoad ?cmdType "general")
+    "Cannot register exact library load gate.")
 opaRequire(axlCmdRegister("opa_snapshot" 'opaSnapshot ?cmdType "general")
     "Cannot register snapshot gate.")
 opaRequire(axlCmdRegister("opa_apply" 'opaApply ?cmdType "general")

@@ -14,9 +14,16 @@ def backend_capabilities() -> dict[str, object]:
         "native_models": ["fixture", "managed-board-v1"],
         "native_acceptance": "Managed-board initial placement and mutations require dedicated live acceptance; not established by unit tests.",
         "logical_design_import": False,
+        "approved_library_loading": True,
+        "library_setup_model": "library-setup-v1",
+        "library_setup_scope": "All logical components unplaced; verified staged assets only; exact human LOAD approval; no implicit placement, import, Save or global settings.",
+        "attachment_verification": "Complete exported-byte SHA-256 by default. Explicit --allow-unverified-3d staging may retain only metadata for 3D:.../ACIS attachments; no 3D preservation or mechanical-clearance claim.",
         "initial_component_placement": True,
         "initial_placement_model": "managed-board-v1",
         "placement_missions": True,
+        "grouped_constraints": True,
+        "group_scope": "Flat room drawings and NET_GROUPs; named physical/spacing/same-net Csets; no nested/module/class-region overrides.",
+        "placement_room_policy": "Preserve all native tags and drawings; constrain explicitly matching labels; report unmatched labels without inventing regions.",
         "nonrectangular_outline": True,
         "outline_model": "polygon-v1: one simple line/circular-arc contour, no holes or islands",
         "move_existing_component": True,
@@ -36,10 +43,11 @@ def backend_capabilities() -> dict[str, object]:
         "initial_placement_requirements": (
             "Explicit managed-board-v1 staging; nonempty imported logical inventory and embedded simple "
             "top-side SMT footprints; simple closed outline/keepin contours and rectangular keepouts; "
-            "millimeters/4/10000; no routing, text, "
-            "unmapped logical functions, groups, advanced pads, or nondefault constraint topology. "
-            "Native attachments must be readable within the bounded exported-byte model. "
-            "Missing definitions and raw empty-design import remain explicit intake blockers. "
+            "millimeters/4/10000; named physical/spacing/same-net Csets and positive planes supported. "
+            "No routing, package/unattached text, unmapped logical functions, nested/component groups, "
+            "advanced pads, electrical Csets or class/region constraint overrides. "
+            "Native attachments must be readable within the bounded exported-byte model, except explicitly opted-in metadata-only embedded 3D attachments. "
+            "Missing definitions require the separate approved library-setup workflow; raw empty-design import remains an intake blocker. "
             "The legacy fixture model does not initially place components."
         ),
     }

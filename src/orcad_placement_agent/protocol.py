@@ -17,8 +17,9 @@ MAX_ROWS = 4096
 MAX_FIELD = 8192
 ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 NUMBER_PATTERN = re.compile(r"-?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,9})?")
-STATUSES = frozenset({"snapshot", "applied", "rejected", "rolled_back", "saved", "indeterminate"})
-OPERATIONS = frozenset({"snapshot", "apply", "save"})
+STATUSES = frozenset({"snapshot", "applied", "rejected", "rolled_back", "saved", "indeterminate",
+                      "libraries_loaded", "library_partial"})
+OPERATIONS = frozenset({"snapshot", "apply", "save", "library_snapshot", "load_libraries"})
 
 
 class ProtocolError(ValueError):
@@ -108,7 +109,7 @@ class Request:
         identifier(self.request_id)
         if self.operation not in OPERATIONS:
             raise ProtocolError("Unsupported operation.")
-        if self.operation == "snapshot":
+        if self.operation in {"snapshot", "library_snapshot"}:
             if any((self.snapshot_id, self.refdes, self.x, self.y, self.angle, self.destination)):
                 raise ProtocolError("Snapshot requests cannot carry write parameters.")
         else:
@@ -120,6 +121,10 @@ class Request:
                     number(value)
                 if self.destination:
                     raise ProtocolError("Apply cannot include a save destination.")
+            elif self.operation == "load_libraries":
+                if (any((self.refdes, self.x, self.y, self.angle))
+                        or re.fullmatch(r"library-[0-9a-f]{32}\.csv", self.destination) is None):
+                    raise ProtocolError("Library loading requires only an exact managed library plan.")
             elif (
                 any((self.refdes, self.x, self.y, self.angle))
                 or re.fullmatch(r"revision-[0-9a-f]{32}\.brd", self.destination) is None
@@ -176,7 +181,12 @@ class Receipt:
                    "scene": 2, "snapshot": 2, "saved": 2, "scene-part": 3,
                    "model": 2, "outline": 5, "keepin": 5, "keepout": 5,
                    "bounds": 6, "pin": 6, "layer": 2, "boundary-model": 2,
-                   "boundary": 5, "boundary-point": 5, "boundary-source": 4}
+                   "boundary": 5, "boundary-point": 5, "boundary-source": 4,
+                   "policy-model": 2, "policy": 8, "policy-part": 3, "room": 7,
+                   "room-assignment": 4, "net-group": 5, "net-group-member": 3,
+                   "constraint-set": 3, "policy-net": 2, "definition": 3,
+                   "padstack": 2, "logical-pin": 4, "library-loaded": 2,
+                   "library-missing": 2, "attachment-policy": 2, "attachment-unverified": 2}
         for record in records:
             if record[0] not in allowed or len(record) != allowed[record[0]]:
                 raise ProtocolError("Unsupported receipt record.")
@@ -194,6 +204,31 @@ class Receipt:
         if len(matches) != 1:
             raise ProtocolError(f"Expected exactly one {name} record.")
         return matches[0]
+
+    @property
+    def attachment_policy(self) -> str:
+        if not any(row[0] == "attachment-policy" for row in self.records):
+            return "sha256-all-v1"
+        value = self.one("attachment-policy")[1]
+        if value not in {"sha256-all-v1", "allow-unverified-embedded-3d-v1"}:
+            raise ProtocolError("Unsupported attachment-verification policy.")
+        return value
+
+    @property
+    def unverified_3d_attachments(self) -> list[str]:
+        policy = self.attachment_policy
+        names = [row[1] for row in self.records if row[0] == "attachment-unverified"]
+        if (len(names) > 128 or len(names) != len(set(names))
+                or any(not name.startswith("3D:") or not name.endswith("/ACIS") or len(name) <= 8 for name in names)
+                or (names and policy != "allow-unverified-embedded-3d-v1")):
+            raise ProtocolError("Unverified attachments exceed the explicitly opted-in embedded-3D scope.")
+        return sorted(names)
+
+    @property
+    def attachment_warning(self) -> str:
+        names = self.unverified_3d_attachments
+        return (" Embedded 3D contents are unverified by explicit operator choice; metadata only: "
+                + ", ".join(names) + ". No 3D preservation or mechanical-clearance claim.") if names else ""
 
     @property
     def scene(self) -> str:

@@ -1,6 +1,7 @@
 """Static managed-SKILL contracts, not a substitute for native fixture acceptance."""
 
 from pathlib import Path
+import hashlib
 import re
 import unittest
 
@@ -115,6 +116,15 @@ class ManagedBoardContractTests(unittest.TestCase):
         self.assertIn("when(object->prop", properties)
         self.assertIn("values = axlDBGetProperties(object)", properties)
         self.assertIn('opaRequire(values "Attached native properties could not be read.")', properties)
+
+    def test_canonicalization_reuses_sort_keys_and_atom_membership(self):
+        parent = (ROOT / "skill" / "placement.il").read_text(encoding="ascii")
+        parent = re.sub(r"(?m)^defstruct\([^\n]+\)\s*$", "", parent)
+        procedures = _procedures(parent)
+        self.assertIn("list(opaStable(value) value)", procedures["opaSortedData"])
+        self.assertNotIn("opaStable(a)", procedures["opaSortedData"])
+        self.assertIn("opaCollectAtoms(item atoms seen)", procedures["opaCollectAtoms"])
+        self.assertIn("unless(seen[value]", procedures["opaCollectAtoms"])
 
     def test_optional_native_reader_suite_contains_no_board_mutations(self):
         native = (ROOT / "tests" / "native" / "managed_readonly.il").read_text(encoding="ascii")
@@ -316,8 +326,8 @@ class ManagedBoardContractTests(unittest.TestCase):
         self.assertIn("member(identity before->drcs)", changed)
         read = self.procedures["opaManagedReadFrame"]
         for guard in (
-            "!design->region", "!design->groups", "!design->module", "!design->zone",
-            "!design->ecsets", "!design->keepinRoute", "!axlDBGetLonelyBranches()",
+            "!design->region", "!design->module", "!design->zone",
+            "!design->ecsets", "!axlDBGetLonelyBranches()",
         ):
             self.assertIn(guard, read)
         self.assertIn("!axlCnsClassTableFind('netclass)", self.source)
@@ -333,10 +343,29 @@ class ManagedBoardContractTests(unittest.TestCase):
         attachment = self.procedures["opaManagedAttachments"]
         self.assertIn("axlGetAttachment(name 'file)", attachment)
         self.assertNotIn("axlGetAttachment(name 'string)", attachment)
-        self.assertIn("metadata->size <= 65536", attachment)
-        self.assertIn("131072 - expanded", attachment)
+        self.assertIn("metadata->size <= 8388608", attachment)
+        self.assertIn("16777216 - expanded", attachment)
+        self.assertIn("opaManagedFileSignature", attachment)
         self.assertIn("deleteFile(path)", attachment)
         self.assertIn('list("attachments" opaManagedAttachments())', self.procedures["opaManagedReadFrame"])
+
+    def test_attachment_fingerprint_streams_every_byte_with_signed_word_guards(self):
+        signature = self.procedures["opaManagedFileSignature"]
+        for required in ('axlDMOpenFile("TEMP" path "rb")', "getc(port)", "charToInt(value)",
+                         "count < maximum", "rightshift(-1 1) == 2147483647",
+                         "when(used >= 56", "words[15] = leftshift(count 3)", "axlDMClose(port)",
+                         '"sha256-expanded-v1"', 'sprintf(nil "%08x" state[index])'):
+            self.assertIn(required, signature)
+        native = (ROOT / "tests" / "native" / "attachment_signatures.il").read_text(encoding="ascii")
+        self.assertEqual(set(_procedures(native)), {"opaAttachmentSignatureAcceptance"})
+        self.assertIn("0 1 55 56 63 64 65 511 512 513 1048576", native)
+        self.assertIn("opaManagedFileSignature(path size - 1)", native)
+        vectors = re.findall(r'\((\d+) "([0-9a-f]{64})"\)', native)
+        self.assertEqual(len(vectors), 11)
+        for size, expected in vectors:
+            size = int(size)
+            content = bytes(range(256)) * (size // 256) + bytes(range(size % 256))
+            self.assertEqual(hashlib.sha256(content).hexdigest(), expected)
 
     def test_native_default_flags_are_modeled_not_confused_with_fixed_topology(self):
         stacks = self.procedures["opaManagedPadstacks"]

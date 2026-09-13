@@ -237,12 +237,15 @@ def capture_observation(
     session: Session, *, capture: Callable[[EditorWindow], WindowImage] = bounded_capture,
     inspect_window: Callable[[int], EditorWindow] | None = None,
     prepare_view: Callable[[Session], str | None] = fit_view,
+    snapshot_operation: str = "snapshot",
 ) -> dict[str, object]:
+    if snapshot_operation not in {"snapshot", "library_snapshot"}:
+        raise VisualError("Capture requires a supported read-only snapshot operation.")
     editor = session.editor()
     inspect_window = inspect_window if inspect_window is not None else WindowsAPI().inspect
     if not editor.same_process(inspect_window(editor.hwnd)):
         raise VisualError("The bound editor identity changed before capture.")
-    before = session.exchange(Request(session.nonce, uuid.uuid4().hex, "snapshot"))
+    before = session.exchange(Request(session.nonce, uuid.uuid4().hex, snapshot_operation))
     if before.status != "snapshot":
         raise VisualError(f"Native pre-capture inspection failed: {before.message}")
     fit_request = prepare_view(session)
@@ -252,7 +255,7 @@ def capture_observation(
         raise VisualError("Capture dimensions disagree with the image.")
     if not editor.same_process(inspect_window(editor.hwnd)):
         raise VisualError("The bound editor changed during capture.")
-    after = session.exchange(Request(session.nonce, uuid.uuid4().hex, "snapshot"))
+    after = session.exchange(Request(session.nonce, uuid.uuid4().hex, snapshot_operation))
     if after.status != "snapshot":
         raise VisualError(f"Native post-capture inspection failed: {after.message}")
     if (
@@ -266,6 +269,7 @@ def capture_observation(
     metadata_path = session.root / f"visual-{observation_id}.json"
     observation: dict[str, object] = {
         "schema_version": 1, "kind": "pcb-visual-observation",
+        "inspection_operation": snapshot_operation,
         "observation_id": observation_id, "before_request_id": before.request_id,
         "after_request_id": after.request_id, "scene_native": after.scene,
         "editor": asdict(editor), "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -275,7 +279,9 @@ def capture_observation(
         "image_path": str(image_path), "metadata_path": str(metadata_path),
         "before_snapshot_receipt_path": str(session.root / f"{before.request_id}.receipt.json"),
         "snapshot_receipt_path": str(session.root / f"{after.request_id}.receipt.json"),
-        "limitations": "Current visible layers/framing only; inspect pixels yourself. Not DRC or electrical proof.",
+        "unverified_3d_attachments": after.unverified_3d_attachments,
+        "limitations": "Current visible layers/framing only; inspect pixels yourself. Not DRC or electrical proof."
+                       + after.attachment_warning,
     }
     write_new(image_path, image.png)
     try:

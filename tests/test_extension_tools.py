@@ -12,7 +12,8 @@ const { createPlacementTools } = await import(pathToFileURL(process.argv[1]));
 const digest = "a".repeat(64);
 const args = { session: "board-fixture", proposal: digest };
 const visual = { observation_id: "b".repeat(32), image_path: "fixture.png" };
-function harness({ supported = true, answer = null, imageFailure = false } = {}) {
+function harness({ supported = true, answer = null, imageFailure = false, preImageFailure = false,
+    loadStatus = "libraries_loaded" } = {}) {
     const requests = [];
     const prompts = [];
     const tools = createPlacementTools({
@@ -23,14 +24,16 @@ function harness({ supported = true, answer = null, imageFailure = false } = {})
         },
         run: async (request) => {
             requests.push(request);
-            return ["describe", "describe-save"].includes(request.action)
+            return ["describe", "describe-save", "describe-libraries"].includes(request.action)
                 ? { status: "prepared", summary: "R1 (10,10) -> (12,12), 90 degrees",
                     working_board: "working.brd", warning: "Memory only", visual }
                 : { status: request.action === "apply" ? "applied" :
-                    request.action === "apply-save" ? "saved" : "observed", visual };
+                    request.action === "apply-save" ? "saved" :
+                    request.action === "load-libraries" ? loadStatus : "observed", visual };
         },
         imageResult: async () => {
-            if (imageFailure) throw new Error("Image unavailable");
+            if (preImageFailure || (imageFailure && requests.some(r =>
+                ["apply", "apply-save", "load-libraries"].includes(r.action)))) throw new Error("Image unavailable");
             return { type: "image", mimeType: "image/png", data: "test" };
         },
     });
@@ -57,6 +60,36 @@ save = h.tools.find(t => t.name === "pcb_save_revision");
 assert.equal((await save.handler(args)).resultType, "success");
 assert.equal(h.requests[1].action, "apply-save");
 assert.equal(h.prompts[0].options.minLength, 69);
+for (const answer of [null, "yes", `APPLY ${digest}`, `SAVE ${digest}`]) {
+    h = harness({ answer });
+    const load = h.tools.find(t => t.name === "pcb_load_libraries");
+    assert.equal((await load.handler(args)).resultType, "denied");
+    assert.equal(h.requests.some(r => r.action === "load-libraries"), false);
+}
+h = harness({ supported: false, answer: `LOAD ${digest}` });
+assert.equal((await h.tools.find(t => t.name === "pcb_load_libraries").handler(args)).resultType, "denied");
+assert.equal(h.requests.length, 0);
+for (const loadStatus of ["libraries_loaded", "library_partial"]) {
+    h = harness({ answer: `LOAD ${digest}`, loadStatus });
+    const result = await h.tools.find(t => t.name === "pcb_load_libraries").handler(args);
+    assert.equal(result.resultType, loadStatus === "library_partial" ? "failure" : "success");
+    assert.equal(h.requests[1].action, "load-libraries");
+    assert.equal(h.requests[1].confirmation, `LOAD ${digest}`);
+    assert.equal(h.prompts[0].options.minLength, 69);
+    assert.equal(JSON.parse(result.textResultForLlm).status, loadStatus);
+}
+h = harness({ answer: `LOAD ${digest}`, imageFailure: true });
+const libraryImage = await h.tools.find(t => t.name === "pcb_load_libraries").handler(args);
+assert.equal(libraryImage.resultType, "failure");
+assert.equal(JSON.parse(libraryImage.textResultForLlm).status, "libraries_loaded");
+assert.equal(h.requests.filter(r => r.action === "load-libraries").length, 1);
+for (const [name, verb] of [["pcb_load_libraries", "LOAD"], ["pcb_save_revision", "SAVE"],
+    ["pcb_apply_placement", "APPLY"]]) {
+    h = harness({ answer: `${verb} ${digest}`, preImageFailure: true });
+    assert.equal((await h.tools.find(t => t.name === name).handler(args)).resultType, "failure");
+    assert.equal(h.prompts.length, 0);
+    assert.equal(h.requests.length, 1);
+}
 h = harness({ answer: "yes" });
 assert.equal((await h.apply.handler(args)).resultType, "denied");
 assert.equal(h.requests.some(r => r.action === "apply"), false);
@@ -90,18 +123,23 @@ for (const [name, args, action] of [
 assert.equal(h.prompts.length, 0);
 let modeChecks = 0;
 let dispatched = false;
+for (const [name, verb, action] of [["pcb_apply_placement", "APPLY", "apply"],
+    ["pcb_load_libraries", "LOAD", "load-libraries"], ["pcb_save_revision", "SAVE", "apply-save"]]) {
+modeChecks = 0;
+dispatched = false;
 const switched = createPlacementTools({
     canPrompt: async () => ++modeChecks === 1,
-    requestInput: async () => `APPLY ${digest}`,
+    requestInput: async () => `${verb} ${digest}`,
     imageResult: async () => ({ type: "image", mimeType: "image/png", data: "test" }),
     run: async (request) => {
-        if (request.action === "apply") dispatched = true;
+        if (request.action === action) dispatched = true;
         return { status: "prepared", summary: "R1 exact move", working_board: "working.brd",
             warning: "Memory only", visual };
     },
-}).find(t => t.name === "pcb_apply_placement");
+}).find(t => t.name === name);
 assert.equal((await switched.handler(args)).resultType, "denied");
 assert.equal(dispatched, false);
+}
 console.log("Bounded extension approval and image-outcome cases passed.");
 """
 

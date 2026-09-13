@@ -22,7 +22,9 @@ shell execution, raw SKILL, GUI clicks, or a different board.
 
 1. Use only the managed board-session name explicitly supplied by the user.
    `pcb_sessions` lists recorded bindings; it does not prove a board is open.
-2. Call `pcb_inspect` and actually examine its returned PNG. Report the
+2. For placement, call `pcb_inspect` and actually examine its returned PNG.
+   For an explicitly bound library-setup phase, use `pcb_inspect_libraries`
+   instead; that snapshot is not full placement readiness. Report the
    observation ID, visible component arrangement, framing, and hidden/unclear
    details. Correlate it with the native snapshot; pixels do not prove exact
    distances, DRC, or electrical performance.
@@ -33,6 +35,39 @@ shell execution, raw SKILL, GUI clicks, or a different board.
    Its bibliography records development-time synthesis, not a live book read.
    Optional local PDFs use `pcb_reference_page`; cite physical PDF pages only
    for actual excerpts read. Missing design facts still limit recommendations.
+
+## Missing-library setup
+
+Missing package definitions block placement, not all read-only setup work.
+The operator must first stage the intended project and use
+`attach --library-setup` for the exact managed-board-v1 session with known,
+nonempty logical inventory and no placed symbols. Do not attach, import a
+logical design, remove placed parts or change configuration yourself.
+
+Inspect `pcb_inspect_libraries` and its actual PNG, then use
+`pcb_prepare_library_load` for exact missing package roots from the captured
+inventory. Preparation verifies the bounded staged PSM/PAD/FSM/SSM cache;
+it does not load anything. Missing dependencies, conflicting same-named files
+or unsupported setup remain blockers, not permission to search arbitrary paths.
+Hand the exact proposal ID, package/file list, snapshot/observation IDs and
+limits to the reviewer, then the executor. Never call `pcb_load_libraries`,
+`pcb_apply_placement` or `pcb_save_revision`, or supply approval yourself.
+
+LOAD is separately human-approved, non-atomic and in memory only; partial or
+uncertain loading is possible. It is not schematic import, existing-definition
+refresh, placement, Save, persistence or global configuration. Use
+`pcb_library_load_status` for an exact outcome without replay. After successful
+loading, ordinary full `pcb_inspect` must still pass before concrete placement:
+complex geometry can remain unsupported. Native LOAD acceptance is pending.
+Portable writes default to disabled; only the operator may opt in with genuine
+interactive input and no auto-answer hooks, never this role.
+
+Strict attachment verification is the default. If the operator explicitly
+staged a full-folder managed session with `--allow-unverified-3d`, preserve its
+exact unverified 3D names and warnings in every plan and handoff. Only nonempty
+`3D:`/`ACIS` content is waived; metadata and supported non-3D SHA-256 checks
+remain. Never enable or toggle the staging policy through tools or metadata,
+and never claim 3D-model or mechanical-clearance verification.
 
 ## Engineering method
 
@@ -62,6 +97,12 @@ For nonrectangular boards, use complete native outline/keepin contours and their
 approximation margins. Bounding rectangles and four inside corners are not
 whole-footprint containment in a concavity. Never simplify the user's boundary
 or delete unrelated unsupported objects to force a placement.
+
+Preserve the native design_policy, including room/net groups and assigned
+constraint sets. Do not replace named Csets with DEFAULT or infer electrical
+roles from group names. Unmatched ROOM tags are metadata, not invented keepins;
+ambiguous matches require resolution. Missing footprints require the separate
+approved setup path above when supported, never implicit library loading.
 
 After an inspection timeout, use `pcb_inspection_status` and reconcile only its
 exact read-only request ID. Never retry a placement to recover an image.

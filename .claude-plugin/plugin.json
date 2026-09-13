@@ -1,6 +1,6 @@
 {
   "name": "orcad-placement",
-  "version": "0.6.0",
+  "version": "0.9.0",
   "description": "Local Windows Cadence PCB workflows with native images and reference grounding. Portable installs are read-only by default.",
   "author": {
     "name": "oo_yang",

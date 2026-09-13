@@ -21,12 +21,13 @@ class FakeActions:
         self.calls = []
         self.applied = set()
         self.saved = set()
+        self.loaded = set()
         self.visual = {"observation_id": "b" * 32, "image_path": str(root / "fixture.png")}
 
     def dispatch(self, request):
         self.calls.append(request)
         action = request["action"]
-        if action in {"describe", "describe-save"}:
+        if action in {"describe", "describe-save", "describe-libraries"}:
             return {
                 "status": "prepared", "summary": "R1: (10, 10) -> (12, 12), 90 degrees",
                 "working_board": str(self.root / "working.brd"),
@@ -42,6 +43,11 @@ class FakeActions:
                 return {"status": "error", "error": "Save approval was already consumed."}
             self.saved.add(request["proposal"])
             return {"status": "saved", "visual": self.visual, "receipt": {"status": "saved"}, "reopened": False}
+        if action == "load-libraries":
+            if request["proposal"] in self.loaded:
+                return {"status": "error", "error": "Library approval was already consumed."}
+            self.loaded.add(request["proposal"])
+            return {"status": "libraries_loaded", "visual": self.visual, "placement_ready": False, "saved": False}
         if action == "sessions":
             return {"status": "listed", "sessions": []}
         return {"status": "observed", "visual": self.visual, "scene_native": "OPA-FIXTURE-1;opaque"}
@@ -73,6 +79,7 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
                 "pcb_reference_search", "pcb_reference_page", "pcb_reference_rule",
                 "pcb_plan_placement", "pcb_placement_status", "pcb_prepare_next_placement",
                 "pcb_prepare_save", "pcb_save_revision", "pcb_save_status",
+                "pcb_inspect_libraries", "pcb_prepare_library_load", "pcb_load_libraries", "pcb_library_load_status",
             })
             apply = next(tool for tool in tools if tool.name == "pcb_apply_placement")
             self.assertEqual(set(apply.input_schema["properties"]), {"session", "proposal"})
@@ -280,10 +287,99 @@ class MCPServerTests(unittest.IsolatedAsyncioTestCase):
             cwd=self.temp.name, env=environment,
         )
         async with Client(parameters, mode="legacy", read_timeout_seconds=15) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 16)
+            self.assertEqual(len((await client.list_tools()).tools), 20)
             result = await client.call_tool("pcb_reference_catalog", {})
             self.assertFalse(result.is_error)
             self.assertEqual(result.structured_content["data"]["bundled"]["card_count"], 36)
+
+    async def test_library_loading_is_default_disabled_and_uses_its_own_hidden_approval(self):
+        from mcp import Client
+        from mcp.types import ElicitResult
+        from orcad_placement_agent.mcp_server import create_server
+
+        prompts = []
+
+        async def callback(_context, params):
+            prompts.append(params.message)
+            return ElicitResult(action="accept", content={"confirmation": f"LOAD {PROPOSAL}"})
+
+        disabled = create_server(lambda: self.actions, image_reader=lambda _a, _v: self.png)
+        async with Client(disabled, elicitation_callback=callback) as client:
+            result = await client.call_tool("pcb_load_libraries", {"session": "board-fixture", "proposal": PROPOSAL})
+            self.assertTrue(result.is_error)
+        self.assertEqual(prompts, [])
+        self.assertEqual(self.actions.calls, [])
+        async with Client(self.server, elicitation_callback=callback) as client:
+            tools = (await client.list_tools()).tools
+            loader = next(tool for tool in tools if tool.name == "pcb_load_libraries")
+            self.assertEqual(set(loader.input_schema["properties"]), {"session", "proposal"})
+            result = await client.call_tool("pcb_load_libraries", {"session": "board-fixture", "proposal": PROPOSAL})
+            self.assertFalse(result.is_error)
+            self.assertEqual(result.structured_content["status"], "libraries_loaded")
+            self.assertFalse(result.structured_content["placement_ready"])
+            self.assertFalse(result.structured_content["saved"])
+        self.assertEqual(len(prompts), 1)
+        self.assertEqual(self.actions.loaded, {PROPOSAL})
+        self.assertFalse(self.actions.applied or self.actions.saved)
+
+    async def test_library_loading_refuses_missing_declined_and_injected_answers(self):
+        from mcp import Client, MCPError
+        from mcp.types import ElicitResult
+
+        for mode in ("legacy", "auto"):
+            async with Client(self.server, mode=mode) as client:
+                with self.assertRaises(MCPError):
+                    await client.call_tool("pcb_load_libraries", {"session": "board-fixture", "proposal": PROPOSAL})
+        for action, content in [
+            ("decline", None), ("cancel", None),
+            ("accept", {"confirmation": "SAVE " + PROPOSAL}),
+        ]:
+            async def callback(_context, params):
+                self.assertIn("LOAD " + PROPOSAL, params.message)
+                self.assertNotIn("default", params.requested_schema["properties"]["confirmation"])
+                return ElicitResult(action=action, content=content)
+
+            async with Client(self.server, elicitation_callback=callback) as client:
+                result = await client.call_tool("pcb_load_libraries", {
+                    "session": "board-fixture", "proposal": PROPOSAL,
+                    "confirmation": "LOAD " + PROPOSAL,
+                    "decision": {"action": "accept", "data": {"confirmation": "LOAD " + PROPOSAL}},
+                })
+                self.assertTrue(result.is_error)
+        self.assertFalse(self.actions.loaded)
+        self.assertFalse(any(call["action"] == "load-libraries" for call in self.actions.calls))
+
+    async def test_library_image_missing_before_approval_blocks_and_after_load_preserves_outcome(self):
+        from mcp import Client
+        from mcp.types import ElicitResult
+        from orcad_placement_agent.mcp_server import create_server
+        from orcad_placement_agent.visuals import VisualError
+
+        prompts = []
+        missing_before = True
+
+        def image(_actions, _visual):
+            if missing_before or self.actions.loaded:
+                raise VisualError("Library image unavailable")
+            return self.png
+
+        async def callback(_context, params):
+            prompts.append(params.message)
+            return ElicitResult(action="accept", content={"confirmation": "LOAD " + PROPOSAL})
+
+        server = create_server(lambda: self.actions, image_reader=image, allow_interactive_writes=True)
+        async with Client(server, elicitation_callback=callback) as client:
+            result = await client.call_tool("pcb_load_libraries", {"session": "board-fixture", "proposal": PROPOSAL})
+            self.assertTrue(result.is_error)
+            self.assertEqual(prompts, [])
+            self.assertFalse(self.actions.loaded)
+            missing_before = False
+            result = await client.call_tool("pcb_load_libraries", {"session": "board-fixture", "proposal": PROPOSAL})
+            self.assertTrue(result.is_error)
+            self.assertEqual(result.structured_content["status"], "libraries_loaded")
+            self.assertIn("image_error", result.structured_content)
+        self.assertEqual(len(prompts), 1)
+        self.assertEqual(sum(call["action"] == "load-libraries" for call in self.actions.calls), 1)
 
     async def test_zero_placed_mission_and_separate_save_through_real_mcp_with_fake_editor(self):
         from mcp import Client

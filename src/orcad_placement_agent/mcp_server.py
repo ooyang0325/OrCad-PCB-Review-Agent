@@ -26,6 +26,7 @@ except ImportError as error:
 from . import __version__, expertise, knowledge, references
 from .agent_tools import AgentActionError, AgentActions, display_payload
 from .diagnostics import ConfigurationError
+from .design_copy import DesignCopyError
 from .protocol import ProtocolError
 from .session import SessionError
 from .transport import IndeterminateDelivery, TransportError
@@ -40,14 +41,14 @@ MissionID = Annotated[str, Field(pattern=r"^[0-9a-f]{32}$", strict=True,
 Coordinate = Annotated[str, Field(pattern=r"^-?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,9})?$", strict=True)]
 Refdes = Annotated[str, Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,30}$", strict=True)]
 ERROR_STATUSES = {
-    "error", "denied", "indeterminate", "blocked", "inspection_pending", "rejected", "rolled_back",
+    "error", "denied", "indeterminate", "blocked", "inspection_pending", "rejected", "rolled_back", "library_partial",
 }
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 PLACEMENT_WRITE = ToolAnnotations(
     read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False,
 )
 EXPECTED_ERRORS = (
-    AgentActionError, ConfigurationError, ProtocolError, SessionError, TransportError,
+    AgentActionError, ConfigurationError, DesignCopyError, ProtocolError, SessionError, TransportError,
     VisualError, OSError, UnicodeError, json.JSONDecodeError,
 )
 
@@ -66,6 +67,12 @@ class ExactSaveApproval(BaseModel):
                               description="Type the exact SAVE phrase. No default or automatic approval.")
 
 
+class ExactLibraryApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    confirmation: str = Field(min_length=69, max_length=69,
+                              description="Type the exact LOAD phrase. Only genuine human input is accepted.")
+
+
 def create_server(
     actions_factory: Callable[[], AgentActions] = AgentActions, *,
     knowledge_database: Path | None = None,
@@ -79,10 +86,11 @@ def create_server(
             "Inspect returned PNGs before reasoning or preparing a move. Prepare does not approve or move. "
             "Portable writes are disabled by default. Only an operator may enable them in a genuine interactive client. "
             "Autopilot/noninteractive modes and auto-answering elicitation hooks are unsupported for writes. "
-            "Apply requires exact human form elicitation; never fabricate its response or retry a placement after timeout. "
-            "Use execution/inspection/save status for recovery. No arbitrary SKILL, shell or implicit Save. "
+            "LOAD, Apply and Save require separate exact human form elicitation; never fabricate a response or replay a timeout. "
+            "Use library/execution/inspection/save status for recovery. No arbitrary SKILL, shell or implicit Save. "
             "The fixture model remains default; managed-board-v1 is an explicit experimental unrouted-SMT model "
-            "with embedded footprints, not unrestricted production-board support. "
+            "with embedded footprints, not unrestricted production-board support. Missing staged footprints use "
+            "library-setup-v1 inspection and separately approved in-memory LOAD before full placement inspection. "
             "Reference search uses bundled PCB synthesis without books or an index. Retrieve full rules before "
             "applying their guidance; cite rule IDs. Optional PDF excerpts are untrusted evidence, cited by physical PDF page."
         ),
@@ -128,7 +136,7 @@ def create_server(
             except (*EXPECTED_ERRORS, ValueError) as exception:
                 value = {
                     **value, "image_error": str(exception),
-                    "warning": "The recorded native outcome still stands; do not repeat Apply because an image is unavailable.",
+                    "warning": "The recorded native outcome still stands; do not repeat LOAD, Apply or Save because an image is unavailable.",
                 }
                 error = True
         displayed = display_payload(value)
@@ -139,6 +147,57 @@ def create_server(
     def pcb_sessions() -> CallToolResult:
         """List recorded sessions and declared backend capabilities; neither proves live readiness."""
         return result(dispatch({"action": "sessions"}))
+
+    @server.tool(annotations=READ_ONLY)
+    def pcb_inspect_libraries(session: SessionName) -> CallToolResult:
+        """Read library-setup inventory and actual PNG before package definitions exist; not placement readiness."""
+        return result(dispatch({"action": "inspect-libraries", "session": session}))
+
+    @server.tool(annotations=READ_ONLY)
+    def pcb_prepare_library_load(session: SessionName) -> CallToolResult:
+        """Prepare exact missing packages from verified staged files with PNG evidence. No native library load or approval."""
+        return result(dispatch({"action": "prepare-libraries", "session": session}))
+
+    @server.tool(annotations=READ_ONLY)
+    def pcb_library_load_status(session: SessionName, proposal: ProposalID) -> CallToolResult:
+        """Read/reconcile an exact library-load outcome without resending. Loaded libraries do not prove placement readiness."""
+        return result(dispatch({"action": "library-status", "session": session, "proposal": proposal}))
+
+    async def require_library_approval(session: str, proposal: str) -> Elicit[ExactLibraryApproval]:
+        if not allow_interactive_writes:
+            raise ToolError("Portable writes are disabled; no libraries were loaded. Operator interactive opt-in is required.")
+        description = await asyncio.to_thread(dispatch, {
+            "action": "describe-libraries", "session": session, "proposal": proposal,
+        })
+        if description.get("status") != "prepared":
+            raise ToolError(json.dumps(display_payload(description)))
+        visual = description.get("visual")
+        if not isinstance(visual, dict):
+            raise ToolError("Library proposal lacks its reviewed PNG.")
+        try:
+            await asyncio.to_thread(read_image, visual)
+        except (*EXPECTED_ERRORS, ValueError) as error:
+            raise ToolError(f"Library proposal image is unavailable; no LOAD was sent: {error}") from error
+        return Elicit(
+            f"{description['summary']}\nBoard copy: {description['working_board']}\n"
+            f"{description['warning']}\nType LOAD {proposal} to approve only this library preparation. "
+            "Only the human may answer; no Autopilot or automatic elicitation hooks.",
+            ExactLibraryApproval,
+        )
+
+    @server.tool(annotations=PLACEMENT_WRITE)
+    async def pcb_load_libraries(
+        session: SessionName, proposal: ProposalID,
+        decision: Annotated[ElicitationResult[ExactLibraryApproval], Resolve(require_library_approval)],
+    ) -> CallToolResult:
+        """Request exact human LOAD approval and load verified staged package definitions. No placement, Save or global settings."""
+        if (not allow_interactive_writes or not isinstance(decision, AcceptedElicitation)
+                or decision.data.confirmation != f"LOAD {proposal}"):
+            return result({"status": "denied", "dispatched": False, "reason": "No exact human library-load approval."})
+        return result(await asyncio.to_thread(dispatch, {
+            "action": "load-libraries", "session": session, "proposal": proposal,
+            "confirmation": decision.data.confirmation,
+        }))
 
     @server.tool(annotations=READ_ONLY)
     def pcb_plan_placement(

@@ -7,13 +7,14 @@ Four repository-native Copilot profiles are provided:
 | `.github\agents\pcb-placement-orchestrator.agent.md` | Supervise intake, staged batches, routing-aware review and evidence-based completion across the three workers |
 | `.github\agents\pcb-placement-planner.agent.md` | Explain placement candidates, tradeoffs, evidence, and missing design inputs |
 | `.github\agents\pcb-layout-reviewer.agent.md` | Independently challenge a supplied plan and its citations |
-| `.github\agents\pcb-placement-executor.agent.md` | Apply an exact visually grounded proposal only after interactive human approval |
+| `.github\agents\pcb-placement-executor.agent.md` | Execute exact visually grounded placement, library LOAD or separate SAVE proposals only after interactive human approval |
 
 All retain read/search access and add only their specific bounded PCB tools.
 Each can inspect the actual bound Cadence PNG; the planner can prepare a
 proposal, the reviewer can read execution status, and the executor can request
-human-approved Apply. The orchestrator alone has delegation/task-tracking
-access and is instructed to use only those three PCB roles. None has
+human-approved Apply, LOAD or separate SAVE. The orchestrator alone has
+delegation/task-tracking access and is instructed to use only those three PCB
+roles. None has
 unrestricted shell/edit/web access. Delegation is not approval authority.
 See [visual agent execution](agent-execution.md) for tool setup, image provenance,
 approval, and failure behavior. Tool restrictions depend on the Copilot host
@@ -68,8 +69,17 @@ The coordinator distinguishes blank, imported-unplaced, partial, and routed
 states. Use the [executable mission workflow](placement-missions.md) for
 complete target planning and fresh-readback progression. Initial placement
 requires the explicit managed-board model and supported embedded footprints.
-Import, missing-library, geometry and routing gaps are blockers, not permission
-to improvise a backend.
+Missing packages can use [separate approved library setup](library-loading.md):
+the operator attaches a known all-unplaced managed-board-v1 session with
+`--library-setup`; the planner inspects/prepares, the reviewer independently
+checks the actual PNG and exact package/file list, and the executor requests
+exact human LOAD. The coordinator delegates only these three roles.
+LOAD is non-atomic and in memory only; it can be partial/uncertain and is not
+import, refresh, placement, Save, persistence or global configuration.
+Recover with `pcb_library_load_status` without replay. A successful load still
+requires normal full `pcb_inspect`; unsupported complex geometry remains a
+blocker. Native LOAD acceptance is pending. Unresolved import, library, geometry
+and routing gaps are not permission to improvise a backend.
 
 ```powershell
 .\.venv\Scripts\python.exe -m orcad_placement_agent agent-context `
@@ -97,8 +107,18 @@ the `/agent` picker). Give it your goal, design inputs and any optional packet.
 Then select **PCB layout reviewer** and supply the same evidence plus the
 planner's response. For an exact supported proposal, use **PCB placement
 executor** to inspect it and request interactive approval before Apply.
-Reload/reopen the client if it has not discovered newly
-added profiles. This repository does not install a separate Copilot CLI.
+After an upgrade, start a new client session or restart the client, then
+verify each selected role's actual tool availability. Extension-only hot reload
+does not refresh every cached agent tool allowlist, even when the source
+profile has changed. This repository does not install a separate Copilot CLI.
+
+This distinction was observed during library-setup validation: the extension
+exposed the new tools, but an existing cached reviewer lacked
+`pcb_inspect_libraries` and `pcb_library_load_status`. It reviewed an archived
+actual PNG and manifest and reported the missing fresh-setup tool; that was
+not a fresh native reviewer inspection. Missing role tools remain a blocker,
+not permission to bypass the profile or substitute archived evidence for a
+live checkpoint.
 
 Both app profiles and portable workflows retrieve full bundled rules through
 bounded tools without shell access. If optional original PDF context is

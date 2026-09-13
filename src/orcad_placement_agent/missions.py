@@ -81,6 +81,7 @@ import time
 
 from .protocol import ProtocolError, canonical_digest, number
 from .boundaries import board_boundaries, footprint_box
+from .room_geometry import inside_room, resolve_rooms
 
 
 MAX_COMPONENTS = 256
@@ -177,7 +178,7 @@ def _board(value):
     _object(value, {
         "model", "board", "snapshot_id", "scene_digest", "outline", "keepin",
         "keepouts", "layers", "components",
-    }, {"outline_boundary", "keepin_boundary"})
+    }, {"outline_boundary", "keepin_boundary", "design_policy"})
     if value["model"] != "managed-board-v1":
         raise MissionError("A managed-board-v1 native model is required.")
     path = _string(value["board"], maximum=4096)
@@ -237,6 +238,16 @@ def _board(value):
     if len({part["refdes"] for part in components}) != len(components):
         raise MissionError("Duplicate native references.")
     result["components"] = components
+    if "design_policy" in value:
+        from .design_policy import validate_policy
+
+        try:
+            result["design_policy"] = validate_policy(value["design_policy"], {part["refdes"] for part in components})
+        except ProtocolError as error:
+            raise MissionError(str(error)) from error
+        used_nets = {pin["net"] for part in components for pin in part["pins"] if pin["net"]}
+        if not used_nets <= set(result["design_policy"]["nets"]):
+            raise MissionError("Pin connectivity disagrees with the native policy net inventory.")
     return result
 
 
@@ -387,7 +398,7 @@ def _net_boxes(part, pose):
 def _identity(board):
     return {
         **{key: board[key] for key in ("model", "board", "outline", "keepin", "keepouts", "layers")},
-        **{key: board[key] for key in ("outline_boundary", "keepin_boundary") if key in board},
+        **{key: board[key] for key in ("outline_boundary", "keepin_boundary", "design_policy") if key in board},
         "components": [
             {key: part[key] for key in ("refdes", "package", "fixed", "mirrored", "bounds", "pins")}
             for part in board["components"]
@@ -403,6 +414,8 @@ def _input_blockers(board, requirements):
     parts = {part["refdes"]: part for part in board["components"]}
     expected, excluded = set(requirements["expected_refdes"]), set(requirements["excluded_refdes"])
     blockers = []
+    _, room_issues, _ = resolve_rooms(board)
+    blockers.extend(issue for issue in room_issues if issue["refdes"] in expected)
     if set(parts) != expected | excluded:
         blockers.append(_diagnosis(
             "inventory_mismatch", "Native inventory must equal expected plus explicit DNP inventory.",
@@ -438,6 +451,7 @@ def _geometry_blockers(board, requirements, poses):
     parts = {part["refdes"]: part for part in board["components"]}
     clearance = Decimal(requirements["clearance_mm"])
     boundaries = board_boundaries(board)
+    room_bindings, _, _ = resolve_rooms(board)
     exclusions = [("keepout", str(index), _box(box)) for index, box in enumerate(board["keepouts"])]
     exclusions += [(region["kind"], region["name"], _box(region["bounds"]))
                    for region in requirements["reserved_regions"]]
@@ -458,6 +472,9 @@ def _geometry_blockers(board, requirements, poses):
         boxes[ref] = box
         if not all(boundary.contains_box(box, clearance) for boundary in boundaries):
             report("outside_keepin", "Footprint violates the actual outline/keepin contour or spacing.", refdes=ref)
+        if ref in room_bindings and not inside_room(box, room_bindings[ref], clearance):
+            report("outside_room", "Footprint violates its explicitly matched native placement room.",
+                   refdes=ref, region=room_bindings[ref]["name"])
         for kind, name, obstacle in exclusions:
             if _collides(box, obstacle, clearance):
                 report("reserved_collision", "Footprint violates an exclusion region.",
@@ -535,6 +552,9 @@ def _routing(board, requirements, poses, *, scope):
         "pad_and_drill_geometry", "trace_width_spacing_and_via_rules",
         "return_path_and_reference_layer_model", "routed_connectivity_and_native_drc",
     ]
+    _, _, unmapped_rooms = resolve_rooms(board)
+    if unmapped_rooms:
+        missing.append("unmapped_native_room_labels")
     if blockers:
         screening = "budget_exceeded"
     elif metrics["unpositioned_component_count"]:
@@ -547,6 +567,11 @@ def _routing(board, requirements, poses, *, scope):
         "scope": scope, "screening": screening, "metrics": metrics, "blockers": blockers,
         "missing_inputs": missing, "operator_evidence": deepcopy(routing),
         "review": "not_performed", "verification": "unverified", "feasibility_proven": False,
+        "native_policy": {
+            "digest": board.get("design_policy", {}).get("digest"),
+            "unmapped_room_labels": unmapped_rooms,
+            "notice": "Native groups/Csets are preserved, not redefined. Unmatched ROOM tags are metadata, not invented keepins; native DRC still applies.",
+        },
         "limitations": "Pin HPWL and AABB corridors do not prove escape, congestion, routability or DRC.",
     }
 
@@ -566,6 +591,7 @@ class _Search:
         self.leaf_budget_failures = 0
         self.clearance = Decimal(requirements["clearance_mm"])
         self.boundaries = board_boundaries(board)
+        self.room_bindings, _, _ = resolve_rooms(board)
         self.groups = {ref: group["name"] for group in requirements["functional_groups"] for ref in group["refdes"]}
         self.critical = set(requirements["critical_nets"])
         self.pin_offsets = {
@@ -593,6 +619,11 @@ class _Search:
             min(item.bounds[2] - item.error for item in self.boundaries),
             min(item.bounds[3] - item.error for item in self.boundaries),
         )
+        room = self.room_bindings.get(ref)
+        if room is not None:
+            room_box = _box(room["bounds"])
+            boundary = (max(boundary[0], room_box[0]), max(boundary[1], room_box[1]),
+                        min(boundary[2], room_box[2]), min(boundary[3], room_box[3]))
         grid = Decimal(self.requirements["grid_mm"])
         domain = []
         for angle in ANGLES:
@@ -613,6 +644,7 @@ class _Search:
                         continue
                     box = (x + local[0], y + local[1], x + local[2], y + local[3])
                     if (all(item.contains_box(box, self.clearance) for item in self.boundaries)
+                            and (room is None or inside_room(box, room, self.clearance))
                             and not any(_collides(box, obstacle, self.clearance) for obstacle in obstacles)):
                         domain.append((x, y, angle, box))
         return domain
@@ -869,7 +901,9 @@ def _status(board, mission, baseline, requirements):
         blockers.append(_diagnosis(
             "immutable_facts_changed", "Native inventory, footprints, pins/nets, flags or board constraints changed.",
         ))
-    changed = any(board[key] != baseline[key] for key in board if key not in ("snapshot_id", "scene_digest"))
+    dynamic_keys = {"snapshot_id", "scene_digest"}
+    changed = ({key: value for key, value in board.items() if key not in dynamic_keys}
+               != {key: value for key, value in baseline.items() if key not in dynamic_keys})
     freshness_ok = True
     if board["snapshot_id"] == baseline["snapshot_id"] and (
         changed or board["scene_digest"] != baseline["scene_digest"]

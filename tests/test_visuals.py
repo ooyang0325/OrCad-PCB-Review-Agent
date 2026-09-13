@@ -90,6 +90,12 @@ class VisualTests(unittest.TestCase):
         self.capture.assert_not_called()
         self.prepare.assert_not_called()
 
+    def test_capture_cannot_dispatch_a_library_load_or_any_write(self):
+        for operation in ("load_libraries", "apply", "save"):
+            with self.subTest(operation=operation), self.assertRaisesRegex(VisualError, "read-only"):
+                capture_observation(self.session, snapshot_operation=operation)
+        self.assertEqual(self.session.requests, [])
+
     def test_wrong_initial_window_does_not_even_snapshot(self):
         with self.assertRaisesRegex(VisualError, "identity changed"):
             self.observe(lambda _hwnd: replace(EDITOR, pid=999))

@@ -1,7 +1,7 @@
 ; Bounded imported-board model, not an import or library-loading interface.
 ; Requires placement.il primitives and the adapter's exact approval/state gate.
 ; Scope: embedded simple top SMT packages, rectangles/straight package linework,
-; mapped logical functions, bounded attachments, default constraints, no routed copper.
+; mapped logical functions, flat protected groups and named constraints; no routed copper.
 ; Native acceptance is still required. Installed API evidence:
 ; DOC/FUNCS/axlDBCreateSymbol.txt, axlLoadSymbol.txt, axlDBRefreshId.txt,
 ; axlDbidDoc.txt, axlPadDbidDoc.txt and DOC/QIR/CHANGE/axlCmdRegister.txt.
@@ -40,6 +40,93 @@ procedure(opaManagedReadBytes(path maximum)
     )
 )
 
+procedure(opaManagedRotate(value bits)
+    bor(rightshift(value bits) leftshift(value 32 - bits))
+)
+
+procedure(opaManagedHashBlock(state words constants)
+    let((a b c d e f g h first second x y)
+        for(index 16 63
+            x = words[index - 15]
+            y = words[index - 2]
+            words[index] = words[index - 16] + words[index - 7] +
+                bxor(opaManagedRotate(x 7) opaManagedRotate(x 18) rightshift(x 3)) +
+                bxor(opaManagedRotate(y 17) opaManagedRotate(y 19) rightshift(y 10)))
+        a = state[0] b = state[1] c = state[2] d = state[3]
+        e = state[4] f = state[5] g = state[6] h = state[7]
+        for(index 0 63
+            first = h + bxor(opaManagedRotate(e 6) opaManagedRotate(e 11) opaManagedRotate(e 25)) +
+                bxor(band(e f) band(bnot(e) g)) + constants[index] + words[index]
+            second = bxor(opaManagedRotate(a 2) opaManagedRotate(a 13) opaManagedRotate(a 22)) +
+                bxor(band(a b) band(a c) band(b c))
+            h = g g = f f = e e = d + first
+            d = c c = b b = a a = first + second)
+        state[0] = state[0] + a state[1] = state[1] + b
+        state[2] = state[2] + c state[3] = state[3] + d
+        state[4] = state[4] + e state[5] = state[5] + f
+        state[6] = state[6] + g state[7] = state[7] + h
+        t
+    )
+)
+
+procedure(opaManagedFileSignature(path maximum)
+    let((port value count used word words state constants digest)
+        opaRequire(fixp(maximum) && maximum >= 0 && maximum <= 8388608
+            "Invalid native attachment signature byte limit.")
+        ; SHA-256 uses wrapping 32-bit words. SKILL decimal literals above
+        ; INT_MAX saturate, so constants use their signed representations.
+        opaRequire(2147483647 + 1 == bnot(2147483647) && rightshift(-1 1) == 2147483647
+            "Native integer semantics do not support the attachment fingerprint.")
+        constants = listToVector('(
+            1116352408 1899447441 -1245643825 -373957723 961987163 1508970993 -1841331548 -1424204075
+            -670586216 310598401 607225278 1426881987 1925078388 -2132889090 -1680079193 -1046744716
+            -459576895 -272742522 264347078 604807628 770255983 1249150122 1555081692 1996064986
+            -1740746414 -1473132947 -1341970488 -1084653625 -958395405 -710438585 113926993 338241895
+            666307205 773529912 1294757372 1396182291 1695183700 1986661051 -2117940946 -1838011259
+            -1564481375 -1474664885 -1035236496 -949202525 -778901479 -694614492 -200395387 275423344
+            430227734 506948616 659060556 883997877 958139571 1322822218 1537002063 1747873779
+            1955562222 2024104815 -2067236844 -1933114872 -1866530822 -1538233109 -1090935817 -965641998))
+        state = vector(1779033703 -1150833019 1013904242 -1521486534
+            1359893119 -1694144372 528734635 1541459225)
+        words = makeVector(64 0)
+        count = 0 used = 0
+        port = axlDMOpenFile("TEMP" path "rb")
+        opaRequire(port "Cannot read the complete extracted attachment for fingerprinting.")
+        unwindProtect(
+            progn(
+                while(value = getc(port)
+                    value = charToInt(value)
+                    opaRequire(value >= 0 && value <= 255 && count < maximum
+                        "Expanded attachment exceeds its bounded signature budget.")
+                    word = quotient(used 4)
+                    words[word] = bor(words[word] leftshift(value 24 - 8 * mod(used 4)))
+                    count = count + 1 used = used + 1
+                    when(used == 64
+                        opaManagedHashBlock(state words constants)
+                        for(index 0 15 words[index] = 0)
+                        used = 0))
+                word = quotient(used 4)
+                words[word] = bor(words[word] leftshift(128 24 - 8 * mod(used 4)))
+                when(used >= 56
+                    opaManagedHashBlock(state words constants)
+                    for(index 0 15 words[index] = 0))
+                words[14] = 0
+                words[15] = leftshift(count 3)
+                opaManagedHashBlock(state words constants)
+                digest = ""
+                for(index 0 7 digest = strcat(digest sprintf(nil "%08x" state[index])))
+                list(count list("sha256-expanded-v1" digest))
+            )
+            axlDMClose(port)
+        )
+    )
+)
+
+procedure(opaManagedAttachmentPolicy()
+    if(boundp('opaUnverified3DNonce) && opaUnverified3DNonce == opaNonce
+        then "allow-unverified-embedded-3d-v1" else "sha256-all-v1")
+)
+
 procedure(opaManagedAttachments()
     let((names rows metadata attachment total expanded bytes path)
         names = axlGetAllAttachmentNames()
@@ -52,30 +139,30 @@ procedure(opaManagedAttachments()
             metadata = axlGetAttachment(name)
             opaRequire(metadata && metadata->objType == "attachment" &&
                 metadata->id == name && fixp(metadata->size) &&
-                metadata->size >= 0 && metadata->size <= 65536
-                "Native attachment is missing or exceeds the 64 KiB bound.")
+                metadata->size >= 0 && metadata->size <= 8388608
+                "Native attachment is missing or exceeds the 8 MiB bound.")
             total = total + metadata->size
-            opaRequire(total <= 131072 "Native attachments exceed the 128 KiB total bound.")
-            ; String retrieval truncates binary attachments at NUL. Export to a
-            ; temporary file and preserve every byte, without changing the DB.
-            attachment = axlGetAttachment(name 'file)
-            opaRequire(attachment && attachment->id == name &&
-                attachment->dataFormat == 'file && stringp(attachment->data) &&
-                attachment->size == metadata->size && attachment->revision == metadata->revision
-                "Cannot extract the complete native attachment.")
-            path = attachment->data
-            unwindProtect(
-                progn(
-                    bytes = opaManagedReadBytes(path min(65536 131072 - expanded))
-                    expanded = expanded + car(bytes)
-                    ; 'file expands compressed attachments and omits text
-                    ; terminators. Preserve both native size and full exported
-                    ; bytes; the two lengths are not generally equal.
-                    rows = cons(list(name metadata->revision metadata->password metadata->size
-                        car(bytes) cadr(bytes)) rows)
-                )
-                opaRequire(deleteFile(path) "Cannot remove the extracted attachment temporary file.")
-            )
+            opaRequire(total <= 16777216 "Native attachments exceed the 16 MiB total bound.")
+            if(opaManagedAttachmentPolicy() == "allow-unverified-embedded-3d-v1" &&
+                strlen(name) > 8 && substring(name 1 3) == "3D:" &&
+                substring(name strlen(name) - 4) == "/ACIS" then
+                bytes = list(nil list("unverified-embedded-3d-v1"))
+            else
+                ; String retrieval truncates binary attachments at NUL.
+                attachment = axlGetAttachment(name 'file)
+                opaRequire(attachment && attachment->id == name &&
+                    attachment->dataFormat == 'file && stringp(attachment->data) &&
+                    attachment->size == metadata->size && attachment->revision == metadata->revision
+                    strcat("Cannot export complete native attachment bytes: " name))
+                path = attachment->data
+                unwindProtect(
+                    progn(
+                        bytes = opaManagedFileSignature(path min(8388608 16777216 - expanded))
+                        expanded = expanded + car(bytes))
+                    opaRequire(deleteFile(path) "Cannot remove the extracted attachment temporary file.")))
+            ; Native stored size and exported byte count need not be equal.
+            rows = cons(list(name metadata->revision metadata->password metadata->size
+                car(bytes) cadr(bytes)) rows)
         )
         opaSortedData(rows)
     )
@@ -103,8 +190,20 @@ procedure(opaManagedInside(inner outer)
 )
 
 procedure(opaManagedObjectGuard(object)
-    opaRequire(object && !object->parentGroups && !axlDBGetAttachedText(object)
-        "Groups or attached text require an additional native scene model.")
+    opaRequire(object "Native object is missing.")
+    foreach(group object->parentGroups
+        opaRequire(member(group axlDBGetDesign()->groups) && !group->parentGroups &&
+            member(object group->groupMembers) &&
+            ((group->type == "NET_GROUP" && object->objType == "net") ||
+             (group->type == "GENERIC" && object->layer == "BOARD GEOMETRY/TOP_ROOM" &&
+              member(object->objType '("polygon" "shape")) &&
+              length(group->groupMembers) == 1))
+            "Unsupported nested or non-room/non-net group membership."))
+    opaRequire(!axlDBGetAttachedText(object) ||
+        (object->layer == "BOARD GEOMETRY/TOP_ROOM" &&
+         member(object->objType '("polygon" "shape")) && length(object->parentGroups) <= 1)
+        sprintf(nil "Attached text is supported only on a protected placement-room drawing; object type: %s."
+            object->objType))
     t
 )
 
@@ -128,6 +227,7 @@ procedure(opaManagedGeometry(object)
         opaRequire(member(object->layer
             '("BOARD GEOMETRY/DESIGN_OUTLINE" "BOARD GEOMETRY/OUTLINE"
               "PACKAGE KEEPIN/ALL" "PACKAGE KEEPOUT/TOP"
+              "BOARD GEOMETRY/TOP_ROOM"
               "PACKAGE GEOMETRY/PLACE_BOUND_TOP" "PACKAGE GEOMETRY/DFA_BOUND_TOP"
               "PACKAGE GEOMETRY/SILKSCREEN_TOP" "PACKAGE GEOMETRY/ASSEMBLY_TOP"))
             "Unsupported board or package geometry layer.")
@@ -492,7 +592,7 @@ procedure(opaManagedStackup(layers)
         foreach(entry entries
             opaRequire(entry->objType == "xsection" && !member(entry->position seen) &&
                 !entry->negativeArtwork &&
-                (member(entry->layerType '("SURFACE" "CONDUCTOR" "DIELECTRIC" "MASK")) ||
+                (member(entry->layerType '("SURFACE" "CONDUCTOR" "PLANE" "DIELECTRIC" "MASK")) ||
                     (!entry->layerType && entry->layerFunction == "SURFACE" && !entry->conductor)) &&
                 member(entry->embedded '(nil "NOT_EMBEDDED")) &&
                 member(entry->embeddedAttach '(nil "" "DIRECT_ATTACH" "INDIRECT_ATTACH")) &&
@@ -500,7 +600,7 @@ procedure(opaManagedStackup(layers)
                 "Unsupported cross-section polarity, embedding, type or external model.")
             seen = cons(entry->position seen)
             when(entry->conductor
-                opaRequire(entry->layerType == "CONDUCTOR" && member(entry->name layers)
+                opaRequire(member(entry->layerType '("CONDUCTOR" "PLANE")) && member(entry->name layers)
                     "Cross-section conductor inventory disagrees with the native layers.")
                 conductors = cons(entry->name conductors))
             ; These values can have finer precision than placement coordinates.
@@ -523,9 +623,6 @@ procedure(opaManagedConstraints()
         opaRequire(length(layers) >= 2 && length(layers) <= 32 &&
             member("TOP" layers) && member("BOTTOM" layers)
             "Missing or oversized conductor stackup.")
-        foreach(domain '(spacing physical sameNet)
-            opaRequire(equal(axlCnsList(domain) '("DEFAULT"))
-                "Nondefault constraint sets require a larger constraint model."))
         opaRequire(!axlCnsList('electrical) &&
             !axlCnsClassTableFind('netclass) && !axlCnsClassTableFind('component) &&
             !axlCnsClassTableFind('wireProf) &&
@@ -536,6 +633,7 @@ procedure(opaManagedConstraints()
             opaRequire(cadr(mode) == 'off "Enabled IC assembly checks are unsupported."))
         options = foreach(mapcar option axlCNSOptions(nil) list(option axlCNSOptions(option)))
         rows = list(list("stackup" opaManagedStackup(layers))
+            list("named-csets" opaManagedCsets(layers))
             list("dfa" nil axlCNSDFAMode('mode))
             list("assembly-modes" opaPairs(assembly))
             list("constraint-options" opaPairs(options))
@@ -551,7 +649,7 @@ procedure(opaManagedConstraints()
             opaRequire(!member(layer seen) "Duplicate conductor layer.")
             seen = cons(layer seen)
             layerInfo = axlLayerGet(strcat("ETCH/" layer))
-            opaRequire(layerInfo && layerInfo->isEtch && layerInfo->type == "CONDUCTOR" &&
+            opaRequire(layerInfo && layerInfo->isEtch && member(layerInfo->type '("CONDUCTOR" "PLANE")) &&
                 layerInfo->drcPhotoType == "positive"
                 "Only positive conductor layers are supported.")
             spacing = axlCNSGetSpacing("" layer nil)
@@ -561,6 +659,168 @@ procedure(opaManagedConstraints()
                 "Complete per-layer constraint values could not be read.")
             rows = cons(list("layer" layer layerInfo->type layerInfo->drcPhotoType
                 opaPairs(spacing) opaPairs(physical) opaPairs(sameNet)) rows))
+        opaSortedData(rows)
+    )
+)
+
+procedure(opaManagedCsets(layers)
+    let((rows names values data)
+        foreach(domain '(physical spacing sameNet)
+            names = axlCnsList(domain)
+            opaRequire(member("DEFAULT" names) && length(names) <= 32
+                "Named constraint-set catalog must include DEFAULT and at most 32 sets.")
+            foreach(name opaSort(names)
+                opaManagedName(name)
+                opaRequire(strlen(name) <= 256 && !assoc(list(domain name) rows)
+                    "Duplicate or oversized named constraint set.")
+                data = nil
+                foreach(layer layers
+                    values = case(domain
+                        (physical axlCNSGetPhysical(name layer nil))
+                        (spacing axlCNSGetSpacing(name layer nil))
+                        (sameNet axlCNSGetSameNet(name layer nil)))
+                    opaRequire(values "A named constraint set could not be read completely.")
+                    data = cons(list(layer opaPairs(values)) data))
+                rows = cons(list(list(domain name) opaSortedData(data)) rows)))
+        opaSortedData(rows)
+    )
+)
+
+procedure(opaManagedCsetReference(properties property domain)
+    let((entry value)
+        entry = assoc(property properties)
+        value = if(entry then cadr(entry) else "")
+        opaRequire(stringp(value) && strlen(value) <= 256 &&
+            (value == "" || member(value axlCnsList(domain)))
+            "A constraint-set assignment refers to an unavailable named set.")
+        value
+    )
+)
+
+procedure(opaManagedRoomLabels(shape)
+    let((labels rows text block)
+        labels = axlDBGetAttachedText(shape)
+        opaRequire(length(labels) == 1 "A placement-room drawing needs one unambiguous native label.")
+        text = car(labels)
+        opaRequire(text->objType == "text" && text->parent == shape &&
+            text->layer == "BOARD GEOMETRY/TOP_ROOM" && !text->parentGroups &&
+            stringp(text->text) && strlen(text->text) > 0 && strlen(text->text) <= 256
+            "Room label has unsupported text ownership or content.")
+        opaField(text->text)
+        opaRequire(stringp(text->textBlock) "Room label has no native text-block identifier.")
+        block = axlGetParam(strcat("paramTextBlock:" text->textBlock))
+        opaRequire(block && block->objType == "paramTextBlock"
+            "Room label text-block settings are unavailable.")
+        list(text->text opaPoint(text->xy) opaBox(text->bBox) text->textBlock
+            text->rotation text->justify text->isMirrored text->mirrorType
+            opaProps(text) axlDBIsReadOnly(text) if(axlDBIsFixed(text) then t else nil)
+            list(block->name block->height block->width block->photoWidth
+                block->charSpace block->lineSpace))
+    )
+)
+
+procedure(opaManagedGroups(design)
+    let((groups rooms names members properties shape geometry label physical spacing sameNet seenRooms name total)
+        opaRequire(length(design->groups) <= 256 "Group inventory exceeds the supported bound.")
+        total = 0
+        foreach(group design->groups
+            total = total + length(group->groupMembers)
+            opaRequire(total <= 4096 "Total native group membership exceeds 4096.")
+            opaRequire(group->objType == "group" && !group->parentGroups &&
+                member(group->type '("GENERIC" "NET_GROUP" "WIRE_PROFILE"))
+                sprintf(nil "Unsupported group: name=%L type=%L object=%L parents=%d."
+                    group->name group->type group->objType length(group->parentGroups)))
+            opaManagedName(group->name)
+            opaRequire(strlen(group->name) <= 256 && !member(group->name names)
+                "Group name is oversized or duplicated.")
+            names = cons(group->name names)
+            properties = opaProps(group)
+            opaRequire(!assoc('ELECTRICAL_CONSTRAINT_SET properties)
+                "Electrical group constraint assignments require a separate model.")
+            members = nil
+            if(group->type == "NET_GROUP" then
+                opaRequire(!axlDBGetAttachedText(group) &&
+                    length(group->groupMembers) > 0 && length(group->groupMembers) <= 4096
+                    "Net group is empty or exceeds the membership bound.")
+                physical = opaManagedCsetReference(properties 'PHYSICAL_CONSTRAINT_SET 'physical)
+                spacing = opaManagedCsetReference(properties 'SPACING_CONSTRAINT_SET 'spacing)
+                sameNet = opaManagedCsetReference(properties 'SAME_NET_SPACING_CONSTRAINT_SET 'sameNet)
+                foreach(net group->groupMembers
+                    opaRequire(net->objType == "net" && member(net design->nets) &&
+                        member(group net->parentGroups) && !member(net->name members)
+                        "Net-group membership or reverse ownership is inconsistent.")
+                    opaManagedObjectGuard(net)
+                    members = cons(net->name members))
+                groups = cons(list(group->name "NET_GROUP" opaSort(members) properties
+                    physical spacing sameNet axlDBIsReadOnly(group)
+                    if(axlDBIsFixed(group) then t else nil)) groups)
+            else if(group->type == "WIRE_PROFILE" then
+                opaRequire(!group->groupMembers && !properties &&
+                    !axlDBGetAttachedText(group) && member(group->name axlSubclassRoute())
+                    "Only empty conductor-named wire-profile metadata is supported.")
+                groups = cons(list(group->name "WIRE_PROFILE" nil nil "" "" ""
+                    axlDBIsReadOnly(group) if(axlDBIsFixed(group) then t else nil)) groups)
+            else
+                opaRequire(length(group->groupMembers) == 1
+                    "A generic group must contain exactly one protected room drawing.")
+                shape = car(group->groupMembers)
+                opaRequire(member(shape->objType '("shape" "polygon")) &&
+                    shape->layer == "BOARD GEOMETRY/TOP_ROOM" &&
+                    equal(shape->parentGroups list(group)) &&
+                    (!shape->parent || shape->parent == design)
+                    "Generic group is not a flat placement-room drawing.")
+                geometry = opaManagedGeometry(shape)
+                label = opaManagedRoomLabels(shape)
+                foreach(text axlDBGetAttachedText(group)
+                    opaRequire(member(text axlDBGetAttachedText(shape))
+                        "Generic group has unaccounted attached text."))
+                rooms = cons(list(group->name car(label) nth(3 geometry) geometry label
+                    axlDBIsReadOnly(shape) if(axlDBIsFixed(shape) then t else nil) group->name) rooms)
+                seenRooms = cons(shape seenRooms)
+                groups = cons(list(group->name "GENERIC" list(group->name) properties
+                    "" "" "" axlDBIsReadOnly(group)
+                    if(axlDBIsFixed(group) then t else nil)) groups))))
+        foreach(shape axlDBGetShapes("BOARD GEOMETRY/TOP_ROOM")
+            unless(member(shape seenRooms)
+                opaRequire(!shape->parentGroups && (!shape->parent || shape->parent == design)
+                    "Room drawing has an unaccounted owner.")
+                geometry = opaManagedGeometry(shape)
+                label = opaManagedRoomLabels(shape)
+                name = strcat("@ungrouped:" car(label))
+                opaRequire(strlen(name) <= 256 && !member(name names)
+                    "Ungrouped room identifiers are ambiguous or oversized.")
+                names = cons(name names)
+                rooms = cons(list(name car(label) nth(3 geometry) geometry label
+                    axlDBIsReadOnly(shape) if(axlDBIsFixed(shape) then t else nil) "") rooms)))
+        opaRequire(length(rooms) <= 128 &&
+            length(setof(group groups cadr(group) == "NET_GROUP")) <= 128
+            "Room or net-group inventory exceeds 128.")
+        foreach(group append(copy(design->netgroup) copy(design->netGroup))
+            opaRequire(member(group design->groups) && group->type == "NET_GROUP"
+                "Unaccounted native net-group view."))
+        list(opaSortedData(groups) opaSortedData(rooms))
+    )
+)
+
+procedure(opaManagedRoomAssignments(design)
+    let((rows entry)
+        foreach(component design->components
+            opaRequire(length(component->functions) <= 256
+                "Component function inventory exceeds the room-assignment bound.")
+            entry = assoc('ROOM opaProps(component))
+            when(entry && cadr(entry) != ""
+                opaManagedName(cadr(entry))
+                opaRequire(strlen(cadr(entry)) <= 256 "ROOM assignment is oversized.")
+                rows = cons(list(component->name "" cadr(entry)) rows))
+            foreach(function component->functions
+                entry = assoc('ROOM opaProps(function))
+                when(entry && cadr(entry) != ""
+                    opaManagedName(cadr(entry))
+                    opaManagedName(function->name)
+                    opaRequire(strlen(cadr(entry)) <= 256 "Function ROOM assignment is oversized.")
+                    opaRequire(strlen(function->name) <= 256 "Function ROOM owner is oversized.")
+                    rows = cons(list(component->name function->name cadr(entry)) rows))
+                opaRequire(length(rows) <= 8192 "Native room assignments exceed 8192.")))
         opaSortedData(rows)
     )
 )
@@ -655,7 +915,8 @@ procedure(opaManagedAllFigures(design boardShapes)
         saved = axlGetSelSet()
         enabled = axlGetFindFilter(nil)
         buttons = axlGetFindFilter(t)
-        allowed = append(copy(boardShapes) append(copy(design->symbols) copy(design->drcs)))
+        allowed = append(copy(design->groups)
+            append(copy(boardShapes) append(copy(design->symbols) copy(design->drcs))))
         foreach(component design->components
             when(component->symbol
                 allowed = append(allowed copy(component->symbol->children))
@@ -663,7 +924,10 @@ procedure(opaManagedAllFigures(design boardShapes)
                 foreach(child component->symbol->children
                     unless(child->objType == "line"
                         allowed = append(allowed copy(child->segments))))))
-        foreach(shape boardShapes allowed = append(allowed copy(shape->segments)))
+        foreach(shape boardShapes
+            allowed = append(allowed copy(shape->segments))
+            when(shape->layer == "BOARD GEOMETRY/TOP_ROOM"
+                allowed = append(allowed copy(axlDBGetAttachedText(shape)))))
         unwindProtect(
             progn(
                 axlClearSelSet()
@@ -783,7 +1047,7 @@ procedure(opaManagedBoundary(object)
         opaManagedObjectGuard(object)
         opaRequire(member(object->objType '("shape" "polygon")) &&
             member(object->layer '("BOARD GEOMETRY/DESIGN_OUTLINE"
-                "BOARD GEOMETRY/OUTLINE" "PACKAGE KEEPIN/ALL")) &&
+                "BOARD GEOMETRY/OUTLINE" "PACKAGE KEEPIN/ALL" "ROUTE KEEPIN/ALL")) &&
             object->nSegs == length(object->segments) &&
             length(object->segments) >= 2 && length(object->segments) <= 512 &&
             !object->voids && !object->net && !object->branch && !object->symbolEtch &&
@@ -1055,25 +1319,92 @@ procedure(opaManagedContourRecords(role geometry)
     )
 )
 
-procedure(opaManagedReadFrame()
+procedure(opaManagedPolicyRecords(common rooms assignments groups design @optional components)
+    let((text chunks records index offset size count netgroups memberships csets roomBounds)
+        text = opaManagedCanonical(list(list("common" common)
+            list("component-invariants" foreach(mapcar data components
+                list(car(data) nth(7 data) nth(10 data) nth(11 data) nth(12 data))))))
+        offset = 1
+        index = 0
+        while(offset <= strlen(text)
+            size = min(8192 strlen(text) - offset + 1)
+            chunks = append(chunks list(list("policy-part" sprintf(nil "%d" index)
+                substring(text offset size))))
+            index = index + 1
+            offset = offset + size)
+        opaRequire(index >= 1 && index <= 64 "Protected design policy exceeds its chunk budget.")
+        netgroups = setof(group groups cadr(group) == "NET_GROUP")
+        memberships = 0
+        foreach(group netgroups memberships = memberships + length(nth(2 group)))
+        csets = 0
+        foreach(domain '(physical spacing sameNet)
+            csets = csets + length(axlCnsList(domain)))
+        records = list(list("policy-model" "grouped-constraints-v1")
+            list("policy" sprintf(nil "%d" index) sprintf(nil "%d" length(rooms))
+                sprintf(nil "%d" length(assignments)) sprintf(nil "%d" length(netgroups))
+                sprintf(nil "%d" memberships) sprintf(nil "%d" csets)
+                sprintf(nil "%d" length(design->nets))))
+        records = append(records chunks)
+        foreach(room rooms
+            roomBounds = nth(2 room)
+            records = append(records list(list("room" car(room) cadr(room)
+                opaCoordinate(caar(roomBounds)) opaCoordinate(cadar(roomBounds))
+                opaCoordinate(caadr(roomBounds)) opaCoordinate(cadadr(roomBounds))))))
+        foreach(assignment assignments
+            records = append(records list(cons("room-assignment" assignment))))
+        foreach(group netgroups
+            records = append(records list(list("net-group" car(group)
+                nth(4 group) nth(5 group) nth(6 group))))
+            foreach(net nth(2 group)
+                records = append(records list(list("net-group-member" car(group) net)))))
+        foreach(domain '(physical spacing sameNet)
+            foreach(name opaSort(axlCnsList(domain))
+                records = append(records list(list("constraint-set" symbolToString(domain) name)))))
+        foreach(name opaSort(design->nets~>name)
+            records = append(records list(list("policy-net" name))))
+        records
+    )
+)
+
+procedure(opaManagedRequireFootprints(design)
+    let((missing matches)
+        foreach(component design->components
+            opaManagedName(component->package)
+            opaRequire(strlen(component->package) <= 256 "Package name is oversized.")
+            matches = setof(definition design->symdefs
+                definition->type == "PACKAGE" && definition->name == component->package)
+            opaRequire(length(matches) <= 1 "Embedded package definition is ambiguous.")
+            unless(matches
+                unless(member(component->package missing)
+                    missing = cons(component->package missing))))
+        opaRequire(!missing sprintf(nil
+            "Missing embedded package definitions (%d); first required package: %s. Attach with --library-setup to prepare an approved LOAD from staged files; nothing was loaded."
+            length(missing) if(missing then car(opaSort(missing)) else "")))
+        t
+    )
+)
+
+procedure(opaManagedReadFrame(@optional librarySetup)
     let((design units padstacks definitions compdefs common components records shapes boardShapes
          outline keepin keepouts legacy geometry placedCount shapeCount data nets drcs scene
-         packageShapes)
+         packageShapes groupData groups rooms assignments roomShapes constraints routeKeepin)
         opaBoardGuard()
         axlDBRefreshId(nil)
         design = axlDBGetDesign()
         units = axlDBGetDesignUnits()
         opaRequire(design && equal(units '("millimeters" 4 10000))
             "Managed boards require millimeters/4/10000.")
+        when(librarySetup
+            opaRequire(!design->symbols
+                "Library setup is limited to a board with no physical symbols."))
         opaManagedObjectGuard(design)
         foreach(check list(
-            list("groups" !design->groups) list("module" !design->module)
+            list("module" !design->module)
             list("zone" !design->zone) list("region" !design->region)
-            list("netclass" !design->netclass) list("netgroup" !design->netgroup)
-            list("netGroup" !design->netGroup) list("bus" !design->bus)
+            list("netclass" !design->netclass) list("bus" !design->bus)
             list("diffpair" !design->diffpair) list("matchgroup" !design->matchgroup)
             list("ecsets" !design->ecsets) list("text" !design->text)
-            list("pins" !design->pins) list("keepinRoute" !design->keepinRoute)
+            list("pins" !design->pins)
             list("koGroup" !design->koGroup) list("lonely branches" !axlDBGetLonelyBranches()))
             opaRequire(cadr(check) strcat("Unsupported managed-board feature: " car(check))))
         opaRequire(length(design->components) >= 1 && length(design->components) <= 256 &&
@@ -1083,22 +1414,41 @@ procedure(opaManagedReadFrame()
         foreach(xnet design->xnet
             opaRequire(xnet->objType == "net" && member(xnet design->nets)
                 "Extended net topology is unsupported."))
-        padstacks = opaManagedPadstacks(design)
-        definitions = opaManagedDefinitions(design padstacks)
+        constraints = opaManagedConstraints()
+        axlDBRefreshId(nil)
+        design = axlDBGetDesign()
+        groupData = opaManagedGroups(design)
+        groups = car(groupData)
+        rooms = cadr(groupData)
+        assignments = opaManagedRoomAssignments(design)
+        roomShapes = axlDBGetShapes("BOARD GEOMETRY/TOP_ROOM")
+        if(librarySetup then
+            padstacks = opaLibraryPadstacks(design)
+            definitions = opaLibraryDefinitions(design)
+        else
+            opaManagedRequireFootprints(design)
+            padstacks = opaManagedPadstacks(design)
+            definitions = opaManagedDefinitions(design padstacks))
         compdefs = opaSortedData(foreach(mapcar definition design->compdefs
             opaManagedCompdef(definition)))
         common = list(list("attachments" opaManagedAttachments())
+            list("attachment-policy" opaManagedAttachmentPolicy())
+            list("groups" groups) list("rooms" rooms) list("room-assignments" assignments)
             list("padstacks" padstacks) list("definitions" definitions)
-            list("compdefs" compdefs) list("rules" opaManagedConstraints())
+            list("compdefs" compdefs) list("rules" constraints)
             list("property-dictionary" opaManagedPropertyDictionary())
             list("board" opaBoardPath units axlVersion('fullVersion) opaProps(design)
                 opaManagedBox(axlGetParam("paramDesign")->bBox)))
+        when(librarySetup
+            common = cons(list("library-search-paths" axlGetVariable("psmpath")
+                axlGetVariable("padpath")) common))
         placedCount = 0
         shapeCount = 0
         foreach(component design->components
             opaRequire(member(component->compdef design->compdefs)
                 "Component has an unaccounted logical definition.")
-            data = opaManagedComponent(component definitions padstacks)
+            data = if(librarySetup then opaLibraryComponent(component)
+                else opaManagedComponent(component definitions padstacks))
             opaRequire(!assoc(car(data) components) "Duplicate native reference designator.")
             components = cons(data components)
             when(nth(5 data)
@@ -1119,9 +1469,10 @@ procedure(opaManagedReadFrame()
                 opaRequire(!shape->parent || shape->parent == design
                     "Unaccounted copper or nested shape.")
                 opaRequire(member(shape->layer '("BOARD GEOMETRY/DESIGN_OUTLINE"
-                    "BOARD GEOMETRY/OUTLINE" "PACKAGE KEEPIN/ALL" "PACKAGE KEEPOUT/TOP"))
+                    "BOARD GEOMETRY/OUTLINE" "PACKAGE KEEPIN/ALL" "PACKAGE KEEPOUT/TOP"
+                    "BOARD GEOMETRY/TOP_ROOM" "ROUTE KEEPIN/ALL"))
                     "Unsupported board-level shape layer.")
-                geometry = if(shape->layer == "PACKAGE KEEPOUT/TOP"
+                geometry = if(member(shape->layer '("PACKAGE KEEPOUT/TOP" "BOARD GEOMETRY/TOP_ROOM"))
                     then opaManagedGeometry(shape) else opaManagedBoundary(shape))
                 opaManagedBox(shape->bBox)
                 boardShapes = cons(shape boardShapes)
@@ -1143,8 +1494,17 @@ procedure(opaManagedReadFrame()
                     (shape->layer == "PACKAGE KEEPOUT/TOP"
                         opaRequire(shape->fill "Package keepouts must be filled rectangles.")
                         keepouts = cons(nth(3 geometry) keepouts)
-                        common = cons(list("keepout" nth(3 geometry) geometry) common)))))
-        opaRequire(outline && keepin && length(keepouts) <= 256 &&
+                        common = cons(list("keepout" nth(3 geometry) geometry) common))
+                    (shape->layer == "BOARD GEOMETRY/TOP_ROOM"
+                        opaRequire(member(shape roomShapes)
+                            "Unaccounted placement-room drawing outside the protected group inventory."))
+                    (shape->layer == "ROUTE KEEPIN/ALL"
+                        opaRequire(!routeKeepin && shape == design->keepinRoute
+                            "Routing keepin identity is missing, duplicated or ambiguous.")
+                        routeKeepin = t
+                        common = cons(list("routing-keepin" geometry) common)))))
+        opaRequire(outline && keepin && (!design->keepinRoute || routeKeepin) &&
+            length(keepouts) <= 256 &&
             length(shapes) == shapeCount + length(boardShapes)
             "Outline, keepin, keepouts or native shape inventory are incomplete.")
         when(legacy
@@ -1160,13 +1520,19 @@ procedure(opaManagedReadFrame()
         components = foreach(mapcar data components append(data list(cadr(nets))))
         common = opaSortedData(cons(list("nets" car(nets)) common))
         drcs = opaManagedDrcs(design)
-        scene = opaManagedCanonical(list(list("common" common) list("components" components)
+        scene = opaManagedCanonical(list(list("inspection-model" if(librarySetup then "library-setup-v1" else "managed-board-v1"))
+            list("common" common) list("components" components)
             list("derived-connectivity" cadr(nets)) list("drc" design->drcState drcs)))
-        records = list(list("board" opaBoardPath) list("model" "managed-board-v1")
+        records = list(list("board" opaBoardPath)
+            list("attachment-policy" opaManagedAttachmentPolicy())
+            list("model" if(librarySetup then "library-setup-v1" else "managed-board-v1"))
             list("units" car(units) sprintf(nil "%d" cadr(units)) sprintf(nil "%d" caddr(units)))
             list("version" axlVersion('fullVersion))
             opaManagedBoxRecord("outline" outline) opaManagedBoxRecord("keepin" keepin)
             list("boundary-model" "polygon-v1"))
+        foreach(attachment cadr(assoc("attachments" common))
+            when(equal(nth(5 attachment) list("unverified-embedded-3d-v1"))
+                records = append(records list(list("attachment-unverified" car(attachment))))))
         records = append(records opaManagedContourRecords("outline" caddr(assoc("outline" common))))
         records = append(records opaManagedContourRecords("keepin" caddr(assoc("keepin" common))))
         foreach(box opaSortedData(keepouts)
@@ -1177,12 +1543,22 @@ procedure(opaManagedReadFrame()
             records = append(records list(list("component" car(data) nth(10 data)
                 opaCoordinate(caadr(data)) opaCoordinate(cadadr(data))
                 sprintf(nil "%d" nth(2 data)) opaFlag(nth(3 data))
-                opaFlag(nth(4 data)) opaFlag(nth(5 data)))
-                opaManagedBoxRecord("bounds" nth(11 data) car(data))))
+                opaFlag(nth(4 data)) opaFlag(nth(5 data)))))
+            unless(librarySetup
+                records = append(records list(opaManagedBoxRecord("bounds" nth(11 data) car(data)))))
             foreach(pin nth(12 data)
-                records = append(records list(list("pin" car(data) car(pin) cadr(pin)
-                    opaCoordinate(car(nth(2 pin))) opaCoordinate(cadr(nth(2 pin))))))))
+                if(librarySetup then
+                    records = append(records list(list("logical-pin" car(data) car(pin) cadr(pin))))
+                else
+                    records = append(records list(list("pin" car(data) car(pin) cadr(pin)
+                        opaCoordinate(car(nth(2 pin))) opaCoordinate(cadr(nth(2 pin)))))))))
+        when(librarySetup
+            foreach(definition design->symdefs
+                records = append(records list(list("definition" definition->type definition->name))))
+            foreach(padstack design->padstacks
+                records = append(records list(list("padstack" padstack->name)))))
         records = append(records opaManagedSceneRecords(scene))
+        records = append(records opaManagedPolicyRecords(common rooms assignments groups design components))
         opaManagedRecordBudget(records)
         make_opaNativeFrame(?scene scene ?records records ?common common
             ?components components ?drcs drcs)
@@ -1197,22 +1573,45 @@ procedure(opaManagedWritesAllowed(frame)
         Package_to_Place_Keepout_Spacing)
         opaRequire(axlCNSDesignModeGet(rule) == 'on
             "Required native placement DRC coverage is not enabled."))
+    when(cadr(assoc("rooms" frame->common)) || cadr(assoc("room-assignments" frame->common))
+        opaRequire(axlCNSDesignModeGet('Package_to_Room_Spacing) == 'on
+            "Native room DRC must remain enabled for room-aware placement."))
     opaRequire(!axlGetVariable("dbg_noskilltriggers")
         "Native lifecycle triggers have been disabled.")
     t
 )
 
+procedure(opaManagedRoomCheck(refdes bounds rooms assignments)
+    let((labels matches)
+        foreach(assignment assignments
+            when(car(assignment) == refdes && !member(nth(2 assignment) labels)
+                labels = cons(nth(2 assignment) labels)))
+        opaRequire(length(labels) <= 1
+            "Component/function ROOM assignments conflict; no mapping was guessed.")
+        when(labels
+            matches = setof(room rooms cadr(room) == car(labels))
+            opaRequire(length(matches) <= 1 "Multiple native room drawings share the assigned label.")
+            when(matches
+                opaRequire(opaManagedInside(bounds nth(2 car(matches)))
+                    "Footprint leaves its explicitly matched native placement room.")))
+        t
+    )
+)
+
 procedure(opaManagedPlacementPolicy(frame)
-    let((outline keepin keepouts bounds others outlinePoly keepinPoly design)
+    let((outline keepin keepouts bounds others outlinePoly keepinPoly design rooms assignments)
         outline = caddr(assoc("outline" frame->common))
         keepin = caddr(assoc("keepin" frame->common))
         keepouts = setof(row frame->common car(row) == "keepout")
+        rooms = cadr(assoc("rooms" frame->common))
+        assignments = cadr(assoc("room-assignments" frame->common))
         design = axlDBGetDesign()
         outlinePoly = opaManagedBoundaryPoly(design->designOutline)
         keepinPoly = opaManagedBoundaryPoly(design->keepinPlace)
         foreach(data frame->components
             when(nth(5 data)
                 bounds = nth(6 data)
+                opaManagedRoomCheck(car(data) bounds rooms assignments)
                 opaRequire(opaManagedContourContains(bounds outline) &&
                     opaManagedContourContains(bounds keepin)
                     "Conservative package/pad bounds cross the actual outline/keepin contour.")

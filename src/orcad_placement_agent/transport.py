@@ -175,7 +175,8 @@ class WindowsAPI:
 
 
 class CommandTransport:
-    COMMANDS = frozenset({"opa_snapshot", "opa_apply", "opa_save"})
+    COMMANDS = frozenset({"opa_snapshot", "opa_apply", "opa_save",
+                          "opa_library_snapshot", "opa_load_libraries"})
 
     def __init__(self, api: WindowAPI | None = None) -> None:
         self.api = api if api is not None else WindowsAPI()
@@ -188,8 +189,8 @@ class CommandTransport:
             raise TransportError("Only registered placement-adapter commands are allowed.")
         if re.fullmatch(r"[0-9a-f]{32}", request_id) is None:
             raise TransportError("Request IDs must be 32 lowercase hexadecimal digits.")
-        if type(timeout_ms) is not int or not 1 <= timeout_ms <= 30000:
-            raise TransportError("Dispatch timeout must be 1 to 30000 milliseconds.")
+        if type(timeout_ms) is not int or not 1 <= timeout_ms <= 60000:
+            raise TransportError("Dispatch timeout must be 1 to 60000 milliseconds.")
         observed = self.api.inspect(editor.hwnd)
         if not editor.same_process(observed):
             raise TransportError("The selected editor identity changed; attach again.")
